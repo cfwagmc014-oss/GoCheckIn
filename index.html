@@ -119,6 +119,7 @@ table.t{width:100%;border-collapse:collapse;font-size:13px}table.t th,table.t td
 
   <div id="pDash" class="wrap hide"></div>
   <div id="pExport" class="wrap hide"></div>
+  <div id="pManage" class="wrap hide"></div>
   <div id="pPlan" class="wrap hide"></div>
   <div id="pFind" class="wrap hide">
     <div class="box"><h3>ตรวจสอบว่าลูกค้าอยู่ในพอร์ตของใคร</h3>
@@ -133,6 +134,7 @@ table.t{width:100%;border-collapse:collapse;font-size:13px}table.t th,table.t td
     <button data-tab="Plan"><b>🗓️</b>แผนวันนี้</button>
     <button data-tab="Dash"><b>📊</b>สรุปผล</button>
     <button data-tab="Export"><b>⬇️</b>Export</button>
+    <button data-tab="Manage" class="hide" id="navMg"><b>🛠️</b>จัดการข้อมูล</button>
   </nav>
 </div>
 <div id="sheetRoot"></div>
@@ -332,7 +334,7 @@ async function login(sf,silent){
     if(S.role==='admin'&&sf!=='ADMIN')S.role='team'; // เลือกเป็น SF = เห็นเฉพาะพอร์ตนั้น
     lsSet('gw_user',{sf,pin:S.pin});
     show('vMain'); $('#hdUser').textContent=S.user.name+' ⎋'; $('#hdTitle').textContent=DEMO?'ST14 - Customer Checklist (ทดลอง)':'ST14 - Customer Checklist';
-    await loadData(); flushQueue(); if(S.user.sf==='ALL')syncRecent(); if(S.user.sf!=='ALL')document.querySelector('nav.bottom button[data-tab=Plan]').click();
+    $('#navMg').classList.toggle('hide',S.user.sf!=='ALL'); await loadData(); flushQueue(); if(S.user.sf==='ALL')syncRecent(); if(S.user.sf!=='ALL')document.querySelector('nav.bottom button[data-tab=Plan]').click();
   }catch(e){
     if(silent&&String(e.message).match(/fetch|network|Failed/i)){ // ออฟไลน์ + เคยล็อกอิน
       S.role='team';S.user={sf,name:sfShort(sf)};show('vMain');$('#hdUser').textContent=S.user.name+' ⎋';await loadData();return}
@@ -399,7 +401,7 @@ $('#list').onclick=e=>{const c=e.target.closest('.card');if(c)openDetail(c.datas
 let qT;$('#fQ').oninput=e=>{clearTimeout(qT);qT=setTimeout(()=>{S.filt.q=e.target.value;applyFilters()},200)};
 [['fStatus','status'],['fGrp','grp'],['fDist','dist'],['fSf','sf']].forEach(([id,k])=>$('#'+id).onchange=e=>{S.filt[k]=e.target.value;applyFilters()});
 $('#fSort').onchange=async e=>{S.filt.sort=e.target.value;if(S.filt.sort==='near'){try{S.pos=await getPos()}catch(err){toast(err.message,4000);S.filt.sort='name';e.target.value='name'}}applyFilters()};
-document.querySelectorAll('nav.bottom button').forEach(b=>b.onclick=()=>{S.tab=b.dataset.tab;document.querySelectorAll('nav.bottom button').forEach(x=>x.classList.toggle('on',x===b));['List','Find','Plan','Dash','Export'].forEach(t=>$('#p'+t).classList.toggle('hide',t!==S.tab));if(S.tab==='Dash')renderDash();if(S.tab==='Plan')renderPlan();window.scrollTo(0,0)});
+document.querySelectorAll('nav.bottom button').forEach(b=>b.onclick=()=>{S.tab=b.dataset.tab;document.querySelectorAll('nav.bottom button').forEach(x=>x.classList.toggle('on',x===b));['List','Find','Plan','Dash','Export','Manage'].forEach(t=>$('#p'+t).classList.toggle('hide',t!==S.tab));if(S.tab==='Manage')renderManage();if(S.tab==='Dash')renderDash();if(S.tab==='Plan')renderPlan();window.scrollTo(0,0)});
 
 /* ============ SHEETS ============ */
 function openSheet(html,onClose){const bg=document.createElement('div');bg.className='sheet-bg';bg.innerHTML=`<div class="sheet">${html}</div>`;$('#sheetRoot').appendChild(bg);
@@ -946,18 +948,7 @@ async function fillAdminApprInner(box,d,op,silent){
     <div class="mut" style="margin:-4px 0 6px">⏱️ อัปเดตอัตโนมัติทุก 15 วินาที · ล่าสุด ${new Date().toLocaleTimeString('th-TH')} <a href="#" id="apRef">🔄 รีเฟรช</a></div>
     <div class="field"><input type="date" id="apD" value="${d}"></div><div style="overflow:auto"><table class="t"><tr><th>SF</th><th>สถานะ</th><th>แผน</th><th>เยี่ยม</th><th>%</th><th>นอกแผน</th><th>Check-in แรก</th><th>กม.</th><th>ปิดงาน</th></tr>${rows}</table></div>
     <p class="mut" style="margin:6px 0 0">กม. = ระยะทางจริงจากพิกัด Check-in ของวันนั้น (${branchPt()?routeTxt():'ระหว่างร้านเท่านั้น — ยังไม่ได้ตั้งพิกัดสาขา'}) · รวมวันนี้ ${km1(sfs.reduce((a,x)=>a+(trvOf(T,x,d)?trvOf(T,x,d).m:0),0))} กม.</p>
-    <div class="acts"><button class="btn ghost" id="apX">📗 Excel ติดตามแผน 30 วัน</button></div></div>
-    <div class="box" style="border:1px solid #C0272D"><h3>🧹 ล้างข้อมูลของวัน ${ddmm(d)} ให้เป็น 0</h3><p class="mut" style="margin:0 0 6px">ลบ แผน + Check-in + ปิดงาน ของวันที่เลือกออกจากระบบถาวร (ข้อมูลที่ติดค้างในตาราง เช่น นอกแผน / กม. จะหายหมด)</p><div class="field"><select id="apWsf"><option value="">ทุก SF</option>${sfs.map(x=>`<option>${x}</option>`).join('')}</select></div><button class="btn red" id="apWipe">🧹 ล้างข้อมูลทั้งหมด</button></div>
-    <div class="box" style="border:1px solid #0168B5"><h3>🧼 ทำความสะอาดข้อมูล Check-in (Records)</h3><p class="mut" style="margin:0 0 6px">ลบรายการ Check-in ที่ซ้ำ และที่ไม่มีพิกัด Check-in จริง (แม้มีพิกัดร้าน) ออกจากชีต Records ถาวร (ระบบสำรองชีตไว้ก่อนอัตโนมัติ)</p><button class="btn ghost" id="apClean">🔍 ตรวจและล้างข้อมูลซ้ำ/ไม่มีพิกัด</button></div>${det}`;
-  $('#apClean').onclick=async()=>{try{showLoading('กำลังตรวจ Records…');const r=await api('recCleanup',{dry:true});hideLoading();
-      if(!r.dup&&!r.noloc){toast(`Records ${r.total} แถว — ไม่พบรายการซ้ำหรือไม่มีพิกัด ✅`,4500);return}
-      if(!confirm(`พบใน Records ${r.total} แถว:\n• ซ้ำ ${r.dup} แถว\n• Check-in ไม่มีพิกัด ${r.noloc} แถว\nเหลือ ${r.keep} แถว\n\nลบถาวร (ระบบสำรองชีตไว้ให้ก่อน) — ดำเนินการ?`))return;
-      showLoading('กำลังล้าง…');const x=await api('recCleanup',{dry:false});S.travel=null;S.recVer=(S.recVer||0)+1;S.seen=new Set();await loadData();hideLoading();toast(`ล้างแล้ว: ซ้ำ ${x.dup} · ไม่มีพิกัด ${x.noloc}${x.backup?' · สำรอง: '+x.backup:''}`,6000);fillAdminAppr()}catch(err){hideLoading();toast(err.message,4000)}};
-  $('#apWipe').onclick=async()=>{const w=$('#apWsf').value;if(!confirm(`ล้างข้อมูลทั้งหมดของ ${w||'ทุก SF'} วันที่ ${ddmm(d)} ให้เป็น 0?\n(แผน + Check-in + ปิดงาน) ลบถาวร กู้คืนไม่ได้`))return;
-    try{showLoading('กำลังล้าง…');const r=await api('dayWipe',{date:d,sf:w});
-      S.queue=S.queue.filter(q=>!(q.rec.type==='CHECKIN'&&String(q.rec.ts).slice(0,10)===d&&(!w||q.rec.user===w)));lsSet('gw_queue',S.queue);
-      Object.keys(localStorage).filter(k=>k.startsWith('gw_plan_')&&k.endsWith('_'+d)&&(!w||k.includes('_'+w+'_'))).forEach(k=>localStorage.removeItem(k));
-      S.travel=null;S.recVer=(S.recVer||0)+1;S.seen=new Set();await loadData();hideLoading();toast(`ล้างแล้ว: แผน ${r.plans||0} · Check-in ${r.checkins||0} · ปิดงาน ${r.closes||0}`,4500);fillAdminAppr()}catch(err){hideLoading();toast(err.message,4000)}};
+    <div class="acts"><button class="btn ghost" id="apX">📗 Excel ติดตามแผน 30 วัน</button></div></div>${det}`;
   $('#apRef').onclick=e=>{e.preventDefault();S.travel=null;fillAdminAppr(true)};
   $('#apD').onchange=e=>{S.apprDate=e.target.value||todayStr();fillAdminAppr()};
   $('#apX').onclick=async()=>{try{await loadXlsx();showLoading('กำลังรวบรวม…');const t=todayStr(),k=await api('planList',{sf:'ALL',from:addDays(t,-30),to:t});hideLoading();
@@ -979,6 +970,34 @@ async function fillAdminApprInner(box,d,op,silent){
     }catch(err){hideLoading();toast(err.message,4000)}};
 }
 
+
+
+/* ============ จัดการข้อมูล (เฉพาะ Admin) ============ */
+function renderManage(){
+  const el=$('#pManage');if(S.user.sf!=='ALL'){el.innerHTML='<div class="box mut">เฉพาะผู้จัดการ</div>';return}
+  const sfs=[...new Set(S.all.map(c=>c.sf).filter(Boolean))].sort();
+  el.innerHTML=`<div class="box" style="border:1px solid #C0272D"><h3>🛠️ จัดการข้อมูล <span class="tag warn">เฉพาะ Admin</span></h3>
+    <p class="mut" style="margin:0 0 10px">การลบทั้งหมดในหน้านี้ถาวร กู้คืนไม่ได้ (ยกเว้นข้อ 2 ที่สำรองชีตให้ก่อน)</p>
+    <div style="border-top:1px solid #eee;padding-top:10px"><b>1) 🧹 ล้างข้อมูลของวัน → ให้เป็น 0</b>
+      <div class="mut" style="margin:2px 0 6px">ลบ แผน + Check-in + ปิดงาน ของวัน/SF ที่เลือก</div>
+      <div class="field"><input type="date" id="mgD" value="${S.mgDate||todayStr()}"></div>
+      <div class="field"><select id="mgSf"><option value="">ทุก SF</option>${sfs.map(x=>`<option>${x}</option>`).join('')}</select></div>
+      <button class="btn red" id="mgWipe">🧹 ล้างข้อมูลของวัน</button></div>
+    <div style="border-top:1px solid #eee;margin-top:12px;padding-top:10px"><b>2) 🧼 ทำความสะอาด Records</b>
+      <div class="mut" style="margin:2px 0 6px">ลบ Check-in ที่ซ้ำ และที่ไม่มีพิกัด Check-in จริง ออกจากชีต Records (สำรองชีตให้ก่อนอัตโนมัติ)</div>
+      <button class="btn ghost" id="mgClean">🔍 ตรวจและล้างข้อมูลซ้ำ/ไม่มีพิกัด</button></div></div>`;
+  $('#mgD').onchange=e=>{S.mgDate=e.target.value};
+  const d0=()=>$('#mgD').value||todayStr();
+  $('#mgClean').onclick=async()=>{try{showLoading('กำลังตรวจ Records…');const r=await api('recCleanup',{dry:true});hideLoading();
+      if(!r.dup&&!r.noloc){toast(`Records ${r.total} แถว — ไม่พบรายการซ้ำหรือไม่มีพิกัด ✅`,4500);return}
+      if(!confirm(`พบใน Records ${r.total} แถว:\n• ซ้ำ ${r.dup} แถว\n• Check-in ไม่มีพิกัด ${r.noloc} แถว\nเหลือ ${r.keep} แถว\n\nลบถาวร (ระบบสำรองชีตไว้ให้ก่อน) — ดำเนินการ?`))return;
+      showLoading('กำลังล้าง…');const x=await api('recCleanup',{dry:false});S.travel=null;S.recVer=(S.recVer||0)+1;S.seen=new Set();await loadData();hideLoading();toast(`ล้างแล้ว: ซ้ำ ${x.dup} · ไม่มีพิกัด ${x.noloc}${x.backup?' · สำรอง: '+x.backup:''}`,6000);renderManage()}catch(err){hideLoading();toast(err.message,4000)}};
+  $('#mgWipe').onclick=async()=>{const w=$('#mgSf').value;if(!confirm(`ล้างข้อมูลทั้งหมดของ ${w||'ทุก SF'} วันที่ ${ddmm(d0())} ให้เป็น 0?\n(แผน + Check-in + ปิดงาน) ลบถาวร กู้คืนไม่ได้`))return;
+    try{showLoading('กำลังล้าง…');const r=await api('dayWipe',{date:d0(),sf:w});
+      S.queue=S.queue.filter(q=>!(q.rec.type==='CHECKIN'&&String(q.rec.ts).slice(0,10)===d0()&&(!w||q.rec.user===w)));lsSet('gw_queue',S.queue);
+      Object.keys(localStorage).filter(k=>k.startsWith('gw_plan_')&&k.endsWith('_'+d0())&&(!w||k.includes('_'+w+'_'))).forEach(k=>localStorage.removeItem(k));
+      S.travel=null;S.recVer=(S.recVer||0)+1;S.seen=new Set();await loadData();hideLoading();toast(`ล้างแล้ว: แผน ${r.plans||0} · Check-in ${r.checkins||0} · ปิดงาน ${r.closes||0}`,4500);renderManage()}catch(err){hideLoading();toast(err.message,4000)}};
+}
 
 /* ============ เรียลไทม์: sync ข้อมูลใหม่ + รีเฟรชรายงานอัตโนมัติ ============ */
 const tsMinus=(ts,ms)=>new Date(Date.parse(ts+'Z')-ms).toISOString().slice(0,19);
