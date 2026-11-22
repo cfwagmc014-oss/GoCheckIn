@@ -141,6 +141,8 @@ table.t{width:100%;border-collapse:collapse;font-size:13px}table.t th,table.t td
 <script>
 /* ============ CONFIG ============ */
 const CONFIG = {
+  PLAN_APPROVAL: true,                // ต้องส่งแผนเยี่ยมให้ผู้จัดการอนุมัติ (ไม่บล็อกการ Check-in) — ตั้ง false เพื่อปิด
+  GOTASK_URL: 'https://cfwagmc014-oss.github.io/go-task/',
   BRANCH: { lat: null, lng: null },   // พิกัด Go Wholesale ระยอง (จุดตั้งต้น/จุดกลับ) — ใส่ที่นี่เพื่อใช้ร่วมกันทุกเครื่อง หรือให้เซลส์ตั้งเองในหน้าแผนวันนี้
   API_URL: 'https://script.google.com/macros/s/AKfycbxyOxVY6jxbDx-JUwhLIyZgBikOlgPlY0eAiY6NYh30p0APXHS77fg3HbDjkWKiy-rNvg/exec',                 // ← วาง Web App URL ของ Apps Script ที่นี่ (เว้นว่าง = โหมดทดลอง)
   DEMO_DATA: 'demo-data.json',
@@ -245,6 +247,12 @@ async function demoApi(action,p){
     return{rows:demoMaster.rows.filter(r=>(r[ix('id')]+' '+r[ix('name')]+' '+r[ix('biz')]).toLowerCase().includes(q)).slice(0,40).map(r=>{const o={};c.forEach((k,i)=>o[k]=r[i]);return o})} }
   if(action==='history'){ return{rows:lsGet('gw_demo_rec',[]).filter(r=>r.id===p.id).reverse().slice(0,30)} }
   if(action==='log'){ const a=lsGet('gw_demo_rec',[]);return{cols:REC_COLS,rows:a.map(r=>REC_COLS.map(c=>r[c]??''))} }
+  if(action==='planSave'){const P=lsGet('gw_demo_plans',{}),x=p.plan,id=x.sf+'|'+x.date,cur=P[id];P[id]={plan_id:id,sf:x.sf,date:x.date,status:x.status==='DRAFT'?'DRAFT':'SUBMITTED',ids:x.ids.join(','),n:x.ids.length,area:x.area||'',submitted_ts:nowIso(),submitted_by:x.sf,decided_ts:'',decided_by:'',note:''};lsSet('gw_demo_plans',P);return{}}
+  if(action==='planDecide'){if(S.pin!=='gw2026')throw new Error('เฉพาะผู้จัดการเท่านั้น');const P=lsGet('gw_demo_plans',{}),c=P[p.plan_id];if(!c||c.status!=='SUBMITTED')throw new Error('แผนนี้ไม่ได้อยู่ในสถานะรออนุมัติ');c.status=p.decision;c.decided_ts=nowIso();c.decided_by='ผู้จัดการ';c.note=p.note||'';lsSet('gw_demo_plans',P);return{}}
+  if(action==='planList'){const from=p.from||todayStr(),to=p.to||from,rec=lsGet('gw_demo_rec',[]).filter(r=>r.type!=='EDIT'),day={},ci={};
+    rec.forEach(r=>{const d=String(r.ts).slice(0,10);if(d<from||d>to)return;(day[d]=day[d]||{})[r.id]=1;const k=d+'|'+r.user;(ci[k]=ci[k]||{})[r.id]=1});
+    const plans=Object.values(lsGet('gw_demo_plans',{})).filter(o=>o.date>=from&&o.date<=to&&(!p.sf||p.sf==='ALL'||o.sf===p.sf)).map(o=>{const ids=o.ids?o.ids.split(','):[],mine=ci[o.date+'|'+o.sf]||{};return{...o,ids,done:ids.filter(i=>(day[o.date]||{})[i]),extra:Object.keys(mine).filter(i=>!ids.includes(i)).length}});
+    const cnt={};Object.keys(ci).forEach(k=>{if(!p.sf||p.sf==='ALL'||k.split('|')[1]===p.sf)cnt[k]=Object.keys(ci[k]).length});return{plans,ci:cnt}}
 }
 
 /* ============ STATE ============ */
@@ -673,17 +681,21 @@ $('#findQ').oninput=e=>{clearTimeout(fT);const q=e.target.value.trim();const out
 
 /* ============ แผนเยี่ยมรายวัน (สร้างอัตโนมัติ) ============ */
 const PLAN_N=[8,10,12,15,20,25];
+const isToday=c=>(c.u?.lastVisit||'').startsWith(todayStr());
+// วันที่ของแผน: วันนี้ / พรุ่งนี้ / มะรืนนี้ (สร้างล่วงหน้าได้ 2 วัน)
+const PD=()=>{const t=todayStr();return S.planDate&&S.planDate>t&&S.planDate<=addDays(t,2)?S.planDate:t};
+const isPD=c=>(c.u?.lastVisit||'').startsWith(PD());
+const isFuture=()=>PD()>todayStr();
 let planN=lsGet('gw_plan_n',12);
 const PLAN_REST=[0,30,45,60,90];let planRest=lsGet('gw_plan_rest',60);
 // ร้านที่เพิ่งเยี่ยมภายใน planRest วัน (และไม่ถึงวันนัดติดตาม) จะไม่ถูกจัดเข้าแผน
-const recentVisit=c=>{if(!planRest)return false;const u=c.u||{};if(!u.visits||!u.lastVisit)return false;if(u.next_follow&&u.next_follow<=todayStr())return false;return dayDiff(u.lastVisit.slice(0,10),todayStr())<planRest};
-const planKey=sf=>'gw_plan_'+sf;
+const recentVisit=c=>{if(!planRest)return false;const u=c.u||{};if(!u.visits||!u.lastVisit)return false;if(u.next_follow&&u.next_follow<=PD())return false;return dayDiff(u.lastVisit.slice(0,10),PD())<planRest};
+const planKey=sf=>'gw_plan_'+sf+'_'+PD();
 const planScope=()=>S.user.sf==='ALL'?(S.planSf||''):S.user.sf;
 const dayDiff=(a,b)=>Math.round((new Date(b)-new Date(a))/864e5);
-const isToday=c=>(c.u?.lastVisit||'').startsWith(todayStr());
 // ให้คะแนนความสำคัญของร้าน — คะแนนสูง = ควรเยี่ยมก่อน
 function planScore(c,maxS){
-  const u=c.u||{},t=todayStr(),R=[];let sc=0;const st=u.cust_status||'';
+  const u=c.u||{},t=PD(),R=[];let sc=0;const st=u.cust_status||'';
   if(/เลิกกิจการ|ย้ายที่ตั้ง/.test(st))return null;
   const due=u.next_follow&&u.next_follow<=t;
   if(due){const d=dayDiff(u.next_follow,t);sc+=100+Math.min(20,d);R.push(['bad','นัดติดตาม'+(d>0?` เกิน ${d} วัน`:' วันนี้')])}
@@ -699,8 +711,11 @@ function planScore(c,maxS){
   return{sc,R};
 }
 const areaKey=c=>(V(c,'dist')||'')+'|'+(V(c,'subd')||'');
+// แผนล่วงหน้า: ไม่ซ้ำกับร้านที่อยู่ในแผนของวันก่อนหน้า (ในเครื่องนี้)
+function priorPlanned(sf){const S2=new Set();for(let d=todayStr();d<PD();d=addDays(d,1)){((lsGet('gw_plan_'+sf+'_'+d,null)||{}).ids||[]).forEach(i=>S2.add(i))}return S2}
 function planPool(sf,exclude,area){
-  const pool=S.all.filter(c=>c.sf===sf&&!isToday(c)&&!recentVisit(c)&&!exclude.has(c.id)&&(!area||areaKey(c)===area));
+  const pr=isFuture()?priorPlanned(sf):new Set();
+  const pool=S.all.filter(c=>c.sf===sf&&!isToday(c)&&!recentVisit(c)&&!pr.has(c.id)&&!exclude.has(c.id)&&(!area||areaKey(c)===area));
   const maxS=Math.max(1,...pool.map(c=>c.s3m));
   return pool.map(c=>({c,...(planScore(c,maxS)||{sc:null})})).filter(x=>x.sc!==null).sort((a,b)=>b.sc-a.sc);
 }
@@ -720,13 +735,14 @@ function buildPlan(sf,n,keep,skipped,area){
   const keepSet=new Set(keep),ex=new Set([...keep,...skipped]);
   const picks=planPool(sf,ex,area).slice(0,Math.max(0,n-keep.length));
   const ordered=orderPlan(picks,S.planPos);
-  return{date:todayStr(),sf,n,rest:planRest,area:area||'',manual:keep.filter(id=>!isToday(S.byId[id])),ids:[...keep,...ordered.map(x=>x.c.id)],skipped};
+  return{date:PD(),sf,n,rest:planRest,area:area||'',manual:keep.filter(id=>!isPD(S.byId[id])),ids:[...keep,...ordered.map(x=>x.c.id)],skipped};
 }
-function renderPlan(regen){
+function renderPlanBody(regen){
   const el=$('#pPlan');if(!el||!S.all.length)return;
   const sf=planScope();
   const sfs=[...new Set(S.all.map(c=>c.sf).filter(Boolean))].sort();
-  const head=`<div class="box"><h3>🗓️ แผนเยี่ยมลูกค้า · ${new Date().toLocaleDateString('th-TH',{weekday:'long',day:'numeric',month:'long',year:'numeric'})}</h3>
+  const head=`<div class="box"><h3>🗓️ แผนเยี่ยมลูกค้า · ${new Date(PD()+'T12:00:00').toLocaleDateString('th-TH',{weekday:'long',day:'numeric',month:'long',year:'numeric'})}</h3>
+    <div class="acts" id="plDay" style="margin:0 0 8px">${[0,1,2].map(k=>{const d=addDays(todayStr(),k);return `<button class="btn ${d===PD()?'red':'ghost'}" data-day="${d}">${['วันนี้','พรุ่งนี้','มะรืนนี้'][k]} · ${ddmm(d)}</button>`}).join('')}</div>
     ${S.user.sf==='ALL'?`<div class="field"><select id="plSf"><option value="">— เลือกพอร์ต SF —</option>${sfs.map(x=>`<option value="${x}"${x===sf?' selected':''}>${sfShort(x)}</option>`).join('')}</select></div>`:''}
     <div style="display:flex;gap:8px;align-items:center"><label class="mut" style="white-space:nowrap">จำนวนร้านต่อวัน</label><select id="plN" style="width:auto">${PLAN_N.map(x=>`<option${x===planN?' selected':''}>${x}</option>`).join('')}</select></div>
     <div style="display:flex;gap:8px;align-items:center;margin-top:8px"><label class="mut" style="white-space:nowrap">ไม่เยี่ยมซ้ำภายใน</label><select id="plRest" style="width:auto">${PLAN_REST.map(x=>`<option value="${x}"${x===planRest?' selected':''}>${x?x+' วัน':'ไม่จำกัด'}</option>`).join('')}</select></div></div>`;
@@ -735,21 +751,21 @@ function renderPlan(regen){
   const areaSel=sf?`<div class="field" style="margin-top:8px"><label class="mut">📍 พื้นที่ (ตำบล / อำเภอ)</label><select id="plArea"><option value="">ทุกพื้นที่ในพอร์ต</option>${Object.entries(AR).sort((a,b)=>b[1]-a[1]).map(([k,n])=>{const [d,t]=k.split('|');return `<option value="${esc(k)}"${k===area?' selected':''}>${esc((t||'—')+' ('+(d||'—')+') · '+n+' ร้าน')}</option>`}).join('')}</select></div>`:'';
   if(!sf){el.innerHTML=head+'<div class="box mut" style="text-align:center">เลือกพอร์ตเพื่อสร้างแผนเยี่ยม</div>';bindPlan();return}
   let st=lsGet(planKey(sf),null);
-  if(regen||!st||st.date!==todayStr()||st.n!==planN||st.rest!==planRest||(st.area||'')!==area){
-    const man=st&&st.date===todayStr()?(st.manual||[]):[];const keep=(st&&st.date===todayStr()?st.ids:[]).filter(id=>S.byId[id]&&(isToday(S.byId[id])||man.includes(id)));
-    st=buildPlan(sf,planN,keep,st&&st.date===todayStr()?st.skipped:[],area);lsSet(planKey(sf),st);
+  if(regen||!st||st.date!==PD()||st.n!==planN||st.rest!==planRest||(st.area||'')!==area){
+    const man=st&&st.date===PD()?(st.manual||[]):[];const keep=(st&&st.date===PD()?st.ids:[]).filter(id=>S.byId[id]&&(isPD(S.byId[id])||man.includes(id)));
+    st=buildPlan(sf,planN,keep,st&&st.date===PD()?st.skipped:[],area);lsSet(planKey(sf),st);
   }
   const items=st.ids.map(id=>S.byId[id]).filter(Boolean);
   const done=items.filter(isToday).length;
   const maxS=Math.max(1,...S.all.filter(c=>c.sf===sf).map(c=>c.s3m));
   const rows=items.map((c,i)=>{
-    const d=isToday(c),sc=planScore(c,maxS),R=(d?[['ok','✓ เยี่ยมแล้ววันนี้']]:(sc?sc.R:[])),q=shopPin(c);
+    const d=isPD(c),sc=planScore(c,maxS),R=(d?[['ok','✓ เยี่ยมแล้ววันนี้']]:(sc?sc.R:[])),q=shopPin(c);
     const dist=(S.planPos&&q)?`<span class="tag blue">${fmtDist(hav(S.planPos.lat,S.planPos.lng,q.lat,q.lng))}</span>`:'';
     const ph=V(c,'phone'),nav=q?`https://www.google.com/maps/dir/?api=1&destination=${q.lat},${q.lng}`:mapUrl(c);
     return `<div class="card${d?' done':''}" data-id="${esc(c.id)}"><div class="pnum">${d?'✓':i+1}</div><div class="main"><div class="t pmain" style="cursor:pointer">${esc(title(c))}</div>
       <div class="s">${esc(c.id)} · ${esc(c.seg||c.grp)}</div><div class="s">${esc([V(c,'subd'),V(c,'dist')].filter(Boolean).join(' / '))||'—'}</div>
       <div class="tags">${R.slice(0,4).map(([k,t])=>`<span class="tag ${k}">${esc(t)}</span>`).join('')}${dist}</div>
-      <div class="acts">${d?'':`<button class="btn red" data-act="ci">📍 Check-in</button>`}<a class="btn ghost" target="_blank" rel="noopener" href="${nav}">🗺️ นำทาง</a>${ph?`<a class="btn ghost" href="tel:${esc(ph)}">📞</a>`:''}${d?'':`<button class="btn grey" data-act="skip">⏭️ ข้าม</button>`}</div></div></div>`}).join('');
+      <div class="acts">${d||isFuture()?'':`<button class="btn red" data-act="ci">📍 Check-in</button>`}<a class="btn ghost" target="_blank" rel="noopener" href="${nav}">🗺️ นำทาง</a>${ph?`<a class="btn ghost" href="tel:${esc(ph)}">📞</a>`:''}${d?'':`<button class="btn grey" data-act="skip">⏭️ ข้าม</button>`}</div></div></div>`}).join('');
   el.innerHTML=head.replace(/<\/div><\/div>$/,'</div>'+areaSel+'</div>')+`<div class="box"><div style="display:flex;justify-content:space-between;margin-bottom:6px"><b>ความคืบหน้า ${done}/${items.length} ร้าน</b><span class="mut">${items.length?Math.round(done*100/items.length):0}%</span></div><div class="prog"><i style="width:${items.length?done*100/items.length:0}%"></i></div>
     <div class="acts"><button class="btn ghost" id="plPos">📡 เรียงจากตำแหน่งฉัน</button><button class="btn grey" id="plRegen">🔄 สร้างแผนใหม่</button><button class="btn grey" id="plAdd">➕ เพิ่ม 1 ร้าน</button><button class="btn grey" id="plExp">⬇️ CSV</button></div>
     <div id="plTrv" class="mut" style="margin-top:8px"></div>
@@ -769,19 +785,20 @@ function bindBranch(){
   const c=$('#brChg');if(c)c.onclick=e=>{e.preventDefault();localStorage.removeItem('gw_branch');S.travel=null;renderPlan()};
 }
 async function fillPlanTravel(sf,done,n){
-  const el=$('#plTrv');if(!el)return;
-  try{const d=await getTravel(),g=trvOf(d,sf,todayStr());if(!$('#plTrv'))return;
+  const el=$('#plTrv');if(!el)return;if(isFuture()){el.innerHTML='';return}
+  try{const d=await getTravel(),g=trvOf(d,sf,PD());if(!$('#plTrv'))return;
     el.innerHTML=(n&&done>=n?'<b style="color:var(--ok)">🎉 จบแผนวันนี้แล้ว</b><br>':'')+(g?`🚗 วันนี้เดินทาง <b>${km1(g.m)} กม.</b> (${g.stops.length} จุด Check-in${g.hasB?` · ไป ${km1(g.stops[0].leg)} + กลับสาขา ${km1(g.back)}`:''})<div class="acts"><button class="btn red" id="plTX">📗 สรุปเดินทาง Excel</button><button class="btn ghost" id="plTP">📄 สรุปเดินทาง PDF</button></div>`:'ยังไม่มี Check-in พร้อมพิกัดวันนี้ — เมื่อ Check-in แล้วจะสรุประยะทางให้ที่นี่')+branchUi();
     bindBranch(sf);
-    if(g){$('#plTX').onclick=()=>exportTravelXlsx(sf,todayStr(),d);$('#plTP').onclick=()=>printTravel(sf,todayStr(),d)}
+    if(g){$('#plTX').onclick=()=>exportTravelXlsx(sf,PD(),d);$('#plTP').onclick=()=>printTravel(sf,PD(),d)}
   }catch(e){}
 }
 function bindPlan(sf,st){
   const el=$('#pPlan');
+  el.querySelectorAll('[data-day]').forEach(b=>b.onclick=()=>{S.planDate=b.dataset.day;renderPlan()});
   const sel=$('#plSf',el);if(sel)sel.onchange=e=>{S.planSf=e.target.value;renderPlan()};
-  $('#plQ',el).oninput=e=>{const q=e.target.value.trim().toLowerCase(),box=$('#plQR',el);if(q.length<2){box.innerHTML='';return}
+  const _q=$('#plQ',el);if(_q)_q.oninput=e=>{const q=e.target.value.trim().toLowerCase(),box=$('#plQR',el);if(q.length<2){box.innerHTML='';return}
     const L=S.all.filter(c=>c.sf===sf&&(c.id+' '+(c.name||'')+' '+(V(c,'biz')||'')).toLowerCase().includes(q)).slice(0,8);
-    box.innerHTML=L.map(c=>{const inP=st.ids.includes(c.id),u=c.u||{},d=u.lastVisit?dayDiff(u.lastVisit.slice(0,10),todayStr()):null;
+    box.innerHTML=L.map(c=>{const inP=st.ids.includes(c.id),u=c.u||{},d=u.lastVisit?dayDiff(u.lastVisit.slice(0,10),PD()):null;
       return `<div class="qr" style="display:flex;gap:8px;align-items:center;padding:7px 0;border-bottom:1px solid #eee"><div style="flex:1;min-width:0"><div class="t">${esc(title(c))}</div><div class="s mut">${esc(c.id)} · ${esc([V(c,'subd'),V(c,'dist')].filter(Boolean).join(' / '))}${d!=null?` · เยี่ยมล่าสุด ${d} วันก่อน`:''}</div></div>${inP?'<span class="tag ok">อยู่ในแผน</span>':`<button class="btn red" data-add="${esc(c.id)}" style="width:auto;padding:6px 10px">➕ เพิ่ม</button>`}</div>`}).join('')||'<div class="mut" style="padding:6px 0">ไม่พบลูกค้าในพอร์ตนี้</div>'};
   const ar=$('#plArea',el);if(ar)ar.onchange=e=>{lsSet('gw_plan_area_'+sf,e.target.value);renderPlan()};
   $('#plRest',el).onchange=e=>{planRest=+e.target.value;lsSet('gw_plan_rest',planRest);renderPlan()};
@@ -790,7 +807,7 @@ function bindPlan(sf,st){
   $('#plRegen',el).onclick=()=>{if(confirm('สร้างแผนวันนี้ใหม่? (ร้านที่เยี่ยมแล้วยังอยู่ในแผน)'))renderPlan(true)};
   $('#plAdd',el).onclick=()=>{const x=planPool(sf,new Set([...st.ids,...st.skipped]),st.area)[0];if(!x)return toast('ไม่มีร้านเหลือให้เพิ่มในพื้นที่นี้');st.ids.push(x.c.id);st.n=planN=st.ids.length;lsSet('gw_plan_n',Math.min(planN,25));lsSet(planKey(sf),st);renderPlan()};
   $('#plPos',el).onclick=async()=>{try{toast('กำลังหาตำแหน่ง…');S.planPos=await getPos();
-      const keep=st.ids.filter(id=>isToday(S.byId[id])),rest=st.ids.filter(id=>!isToday(S.byId[id]));
+      const keep=st.ids.filter(id=>isPD(S.byId[id])),rest=st.ids.filter(id=>!isPD(S.byId[id]));
       const maxS=Math.max(1,...S.all.filter(c=>c.sf===sf).map(c=>c.s3m));
       st.ids=[...keep,...orderPlan(rest.map(id=>({c:S.byId[id],sc:(planScore(S.byId[id],maxS)||{sc:0}).sc})),S.planPos).map(x=>x.c.id)];lsSet(planKey(sf),st);renderPlan();toast('เรียงลำดับตามตำแหน่งปัจจุบันแล้ว (ร้านที่มีหมุดเท่านั้นที่เรียงตามระยะทางได้)',4000)}catch(e){toast(e.message,4000)}};
   $('#plExp',el).onclick=()=>{const q=v=>{v=String(v??'');return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v};
@@ -803,6 +820,80 @@ function bindPlan(sf,st){
     if(act==='ci')return openForm(S.byId[id],'CHECKIN');
     if(act==='skip'){st.skipped.push(id);st.ids=st.ids.filter(x=>x!==id);const x=planPool(sf,new Set([...st.ids,...st.skipped]),st.area)[0];if(x)st.ids.push(x.c.id);lsSet(planKey(sf),st);return renderPlan()}
     if(e.target.closest('.pmain'))openDetail(id)};
+}
+
+
+/* ============ อนุมัติแผนเยี่ยม + ติดตามผล ============ */
+S.planStat=S.planStat||{};S.planSrv=S.planSrv||{};const pk=sf=>sf+'|'+PD();
+const APPR_ON=()=>CONFIG.PLAN_APPROVAL!==false;
+const STAT_TH={SUBMITTED:'⏳ รออนุมัติ',APPROVED:'✅ อนุมัติแล้ว',REJECTED:'❌ ส่งกลับแก้ไข',DRAFT:'📝 ร่าง'};
+const ddmm=d=>d.slice(8)+'/'+d.slice(5,7);
+const addDays=(d,n)=>{const t=new Date(d+'T00:00:00');t.setDate(t.getDate()+n);return `${t.getFullYear()}-${pad(t.getMonth()+1)}-${pad(t.getDate())}`};
+function renderPlan(regen,noFetch){
+  renderPlanBody(regen);
+  const el=$('#pPlan');if(!el||!S.all.length||!APPR_ON())return;
+  el.insertAdjacentHTML('afterbegin','<div id="plAppr"></div>');
+  if(S.user.sf==='ALL')return fillAdminAppr();
+  const sf=planScope();
+  if(S.planStat[pk(sf)]==='SUBMITTED'||S.planStat[pk(sf)]==='APPROVED'){
+    ['#plRegen','#plAdd'].forEach(q=>{const e=$(q,el);if(e)e.style.display='none'});
+    ['#plN','#plRest','#plArea'].forEach(q=>{const e=$(q,el);if(e)e.disabled=true});
+    const q=$('#plQ',el);if(q)q.closest('.field').style.display='none';
+    el.querySelectorAll('[data-act=skip]').forEach(b=>b.style.display='none');
+  }
+  fillSalesAppr(sf,noFetch);
+}
+async function fillSalesAppr(sf,noFetch){
+  const box=$('#plAppr');if(!box)return;
+  const st=lsGet(planKey(sf),null),n=st?st.ids.length:0,t=PD(),td=todayStr();
+  if(!noFetch||!S.planHist){try{const j=await api('planList',{sf,from:addDays(td,-7),to:addDays(td,2)});S.planHist=j.plans.sort((a,b)=>a.date<b.date?1:-1);S.ci=j.ci;
+      const cur=S.planHist.find(x=>x.date===t);S.planSrv[pk(sf)]=cur||null;const ns=cur?cur.status:'';
+      if(cur&&(cur.status==='SUBMITTED'||cur.status==='APPROVED')&&st&&cur.ids.join()!==st.ids.join()){st.ids=cur.ids.filter(id=>S.byId[id]);st.manual=st.ids.filter(id=>!isPD(S.byId[id]));lsSet(planKey(sf),st)}
+      if(ns!==(S.planStat[pk(sf)]||'')){S.planStat[pk(sf)]=ns;return renderPlan(false,true)}}catch(e){box.innerHTML='<div class="box mut">โหลดสถานะอนุมัติไม่ได้: '+esc(e.message)+'</div>';return}}
+  const cur=S.planSrv[pk(sf)],stt=cur?cur.status:'',done=st?st.ids.filter(id=>S.byId[id]&&isPD(S.byId[id])).length:0;
+  const extra=S.all.filter(c=>c.sf===sf&&isPD(c)&&!(st&&st.ids.includes(c.id))).length;
+  let body='';
+  if(stt==='SUBMITTED')body=`<b>⏳ ส่งแผนแล้ว รอผู้จัดการอนุมัติ</b><div class="mut">ส่งเมื่อ ${hhmm(cur.submitted_ts)} น. · ${cur.ids.length} ร้าน</div><div class="acts"><button class="btn grey" data-ap="recall">↩️ ดึงกลับมาแก้ไข</button></div>`;
+  else if(stt==='APPROVED')body=`<b style="color:var(--ok)">✅ แผน${isFuture()?'วันที่ '+ddmm(t):'วันนี้'}ได้รับอนุมัติแล้ว</b><div class="mut">${esc(cur.decided_by||'ผู้จัดการ')} อนุมัติ ${hhmm(cur.decided_ts)} น.${cur.note?' · '+esc(cur.note):''}</div>${isFuture()?'':`<div style="margin-top:6px">ตามแผน <b>${done}/${cur.ids.length}</b> ร้าน${extra?` · <span style="color:var(--red)">นอกแผน ${extra} ร้าน</span>`:''}</div>`}<div class="acts"><button class="btn grey" data-ap="recall">✏️ ขอแก้แผน (ต้องอนุมัติใหม่)</button></div>`;
+  else body=`<b>${stt==='REJECTED'?'❌ ผู้จัดการส่งกลับให้แก้ไข':(isFuture()?'📝 แผนวันที่ '+ddmm(t)+' ยังไม่ได้ส่งขออนุมัติ':'📝 แผนวันนี้ยังไม่ได้ส่งขออนุมัติ')}</b>${stt==='REJECTED'&&cur.note?`<div style="color:var(--red)">เหตุผล: ${esc(cur.note)}</div>`:''}<div class="mut">จัดแผนให้เรียบร้อยแล้วกดส่ง · ยัง Check-in ได้ตามปกติระหว่างรออนุมัติ</div><div class="acts"><button class="btn red" data-ap="submit"${n?'':' disabled'}>📨 ส่งแผนขออนุมัติ (${n} ร้าน)</button></div>`;
+  const hist=(S.planHist||[]).filter(x=>x.date<td).slice(0,5).map(x=>`<div class="s">${ddmm(x.date)} · ${STAT_TH[x.status]||x.status} · ตามแผน ${x.done.length}/${x.ids.length} (${x.ids.length?Math.round(x.done.length*100/x.ids.length):0}%)${x.extra?` · นอกแผน ${x.extra}`:''}</div>`).join('');
+  box.innerHTML=`<div class="box" style="border-left:4px solid ${stt==='APPROVED'?'var(--ok)':stt==='SUBMITTED'?'#e0a800':'var(--red)'}">${body}${hist?`<details style="margin-top:8px"><summary class="mut">ผลตามแผนย้อนหลัง</summary>${hist}</details>`:''}</div>`;
+  box.onclick=async e=>{const b=e.target.closest('[data-ap]');if(!b)return;const a=b.dataset.ap;
+    try{if(a==='submit'){const s2=lsGet(planKey(sf),null);if(!s2||!s2.ids.length)return;showLoading('กำลังส่งแผน…');await api('planSave',{sf,plan:{sf,date:t,ids:s2.ids,area:s2.area||'',status:'SUBMITTED'}});hideLoading();toast('ส่งแผนขออนุมัติแล้ว')}
+      else{if(!confirm(a==='recall'&&stt==='APPROVED'?'ขอแก้แผนที่อนุมัติแล้ว? ต้องส่งให้ผู้จัดการอนุมัติใหม่':'ดึงแผนกลับมาแก้ไข?'))return;showLoading('กำลังดำเนินการ…');await api('planSave',{sf,plan:{sf,date:t,ids:(lsGet(planKey(sf),{ids:[]}).ids),status:'DRAFT'}});hideLoading()}
+      S.planHist=null;S.planStat[pk(sf)]=null;renderPlan();
+    }catch(err){hideLoading();toast(err.message,4000)}};
+}
+function goTaskText(p){const lines=p.ids.map((id,i)=>{const c=S.byId[id];return `${i+1}. ${c?title(c):id} (${id})${c?' – '+[V(c,'subd'),V(c,'dist')].filter(Boolean).join('/'):''}`});
+  return{title:`แผนเยี่ยมลูกค้า ${sfShort(p.sf)} ${ddmm(p.date)} (${p.ids.length} ร้าน)`,desc:`แผนเยี่ยมลูกค้าที่ผู้จัดการอนุมัติแล้ว\nพอร์ต: ${sfShort(p.sf)} · วันที่ ${p.date}${p.area?'\nพื้นที่: '+p.area.split('|').reverse().join(' / '):''}\n\n${lines.join('\n')}\n\nติดตามผลใน ST14 - Customer Checklist (แท็บแผนวันนี้)`}}
+async function fillAdminAppr(){
+  const box=$('#plAppr');if(!box)return;const d=S.apprDate||todayStr();
+  box.innerHTML='<div class="box"><h3>📋 อนุมัติ/ติดตามแผนเยี่ยม</h3><span class="mut">กำลังโหลด…</span></div>';
+  let j;try{const td=todayStr(),lo=d<td?d:td,hi=addDays(td,2)>d?addDays(td,2):d;j=await api('planList',{sf:'ALL',from:lo,to:hi})}catch(e){box.innerHTML='<div class="box mut">โหลดแผนไม่ได้: '+esc(e.message)+'</div>';return}
+  const sfs=[...new Set(S.all.map(c=>c.sf).filter(Boolean))].sort(),P={};j.plans.filter(p=>p.date===d).forEach(p=>P[p.sf]=p);
+  const shown=j.plans.filter(p=>p.date===d||p.status==='SUBMITTED');
+  const pend=j.plans.filter(p=>p.status==='SUBMITTED').length;
+  const rows=sfs.map(sf=>{const p=P[sf],ex=p?p.extra:(j.ci[d+'|'+sf]||0),pl=p?p.ids.length:0,dn=p?p.done.length:0;
+    return `<tr><td>${sfShort(sf)}</td><td>${p?(STAT_TH[p.status]||p.status):'<span class="mut">ไม่ได้ส่ง</span>'}</td><td>${pl||'-'}</td><td>${p?dn:'-'}</td><td>${pl?Math.round(dn*100/pl)+'%':'-'}</td><td>${ex||'-'}</td></tr>`}).join('');
+  const det=shown.sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:a.sf<b.sf?-1:1).map(p=>`<details class="box" style="margin:6px 0"${p.status==='SUBMITTED'?' open':''}><summary><b>${sfShort(p.sf)}</b> · แผน ${ddmm(p.date)} · ${STAT_TH[p.status]||p.status} · ${p.ids.length} ร้าน (เยี่ยมแล้ว ${p.done.length})${p.status==='SUBMITTED'?' 👈':''}</summary>
+    <div style="margin-top:6px">${p.ids.map((id,i)=>{const c=S.byId[id];return `<div class="s">${p.done.includes(id)?'✅':'⬜'} ${i+1}. ${esc(c?title(c):id)} · ${esc(c?[V(c,'subd'),V(c,'dist')].filter(Boolean).join(' / '):'')}</div>`}).join('')}</div>
+    ${p.note?`<div class="mut">หมายเหตุ: ${esc(p.note)}</div>`:''}
+    <div class="acts">${p.status==='SUBMITTED'?`<button class="btn red" data-ad="ok" data-id="${esc(p.plan_id)}">✅ อนุมัติ</button><button class="btn grey" data-ad="no" data-id="${esc(p.plan_id)}">❌ ส่งกลับ</button>`:''}${p.status==='APPROVED'?`<button class="btn ghost" data-ad="gt" data-id="${esc(p.plan_id)}">🔗 สร้างงานใน GO TASK</button>`:''}</div></details>`).join('');
+  box.innerHTML=`<div class="box"><h3>📋 อนุมัติ/ติดตามแผนเยี่ยม${pend?` <span class="tag warn">รออนุมัติ ${pend}</span>`:''}</h3>
+    <div class="field"><input type="date" id="apD" value="${d}"></div><div style="overflow:auto"><table class="t"><tr><th>SF</th><th>สถานะ</th><th>แผน</th><th>เยี่ยม</th><th>%</th><th>นอกแผน</th></tr>${rows}</table></div>
+    <div class="acts"><button class="btn ghost" id="apX">📗 Excel ติดตามแผน 30 วัน</button></div></div>${det}`;
+  $('#apD').onchange=e=>{S.apprDate=e.target.value||todayStr();fillAdminAppr()};
+  $('#apX').onclick=async()=>{try{await loadXlsx();showLoading('กำลังรวบรวม…');const t=todayStr(),k=await api('planList',{sf:'ALL',from:addDays(t,-30),to:t});hideLoading();
+    const A=[['วันที่','SF','สถานะ','จำนวนแผน','เยี่ยมตามแผน','% ตามแผน','นอกแผน','ส่งเมื่อ','ตัดสินเมื่อ','หมายเหตุ']],M=[['วันที่','SF','รหัสสมาชิก','ชื่อร้าน','ตำบล/อำเภอ']];
+    k.plans.sort((a,b)=>a.date<b.date?1:a.date>b.date?-1:a.sf<b.sf?-1:1).forEach(p=>{A.push([p.date,sfShort(p.sf),({SUBMITTED:'รออนุมัติ',APPROVED:'อนุมัติแล้ว',REJECTED:'ส่งกลับ',DRAFT:'ร่าง'})[p.status]||p.status,p.ids.length,p.done.length,p.ids.length?Math.round(p.done.length*100/p.ids.length):0,p.extra,p.submitted_ts,p.decided_ts,p.note]);
+      if(p.status==='APPROVED'&&p.date<t)p.ids.filter(i=>!p.done.includes(i)).forEach(id=>{const c=S.byId[id];M.push([p.date,sfShort(p.sf),id,c?title(c):'',c?[V(c,'subd'),V(c,'dist')].filter(Boolean).join(' / '):''])})});
+    const wb=XLSX.utils.book_new(),w1=XLSX.utils.aoa_to_sheet(A),w2=XLSX.utils.aoa_to_sheet(M);w1['!cols']=[{wch:12},{wch:9},{wch:13},{wch:10},{wch:12},{wch:10},{wch:9},{wch:19},{wch:19},{wch:30}];w2['!cols']=[{wch:12},{wch:9},{wch:14},{wch:36},{wch:26}];
+    XLSX.utils.book_append_sheet(wb,w1,'ติดตามแผน');XLSX.utils.book_append_sheet(wb,w2,'ร้านที่ไม่ได้เยี่ยมตามแผน');XLSX.writeFile(wb,`GW_PlanTracking_${stamp()}.xlsx`)}catch(e){hideLoading();toast(e.message,4000)}};
+  box.onclick=async e=>{const b=e.target.closest('[data-ad]');if(!b)return;const id=b.dataset.id,a=b.dataset.ad,p=j.plans.find(x=>x.plan_id===id);
+    try{if(a==='gt'){const g=goTaskText(p);try{await navigator.clipboard.writeText(g.title+'\n\n'+g.desc);toast('คัดลอกรายละเอียดงานแล้ว — วางในหน้าสร้างงานของ GO TASK',4500)}catch(_){prompt('คัดลอกข้อความนี้ไปวางใน GO TASK',g.title+'\n\n'+g.desc)}window.open(CONFIG.GOTASK_URL+'#/new','_blank','noopener');return}
+      let note='';if(a==='no'){note=prompt('เหตุผลที่ส่งกลับ (เซลส์จะเห็น)')||'';if(!note)return}
+      showLoading('กำลังบันทึก…');await api('planDecide',{plan_id:id,decision:a==='ok'?'APPROVED':'REJECTED',note});hideLoading();toast(a==='ok'?'อนุมัติแล้ว':'ส่งกลับแล้ว');fillAdminAppr()
+    }catch(err){hideLoading();toast(err.message,4000)}};
 }
 
 /* ============ BOOT ============ */
