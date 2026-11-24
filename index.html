@@ -107,6 +107,7 @@ table.t{width:100%;border-collapse:collapse;font-size:13px}table.t th,table.t td
     <div class="filters">
       <input class="full" id="fQ" type="search" placeholder="ค้นหา ชื่อ / ร้าน / รหัสสมาชิก / เบอร์ / ที่อยู่">
       <select id="fStatus"></select>
+      <div class="full" id="fcsBox"><button type="button" class="btn ghost" id="fcsBtn" style="width:100%;text-align:left;display:flex;justify-content:space-between"><span id="fcsTxt">🏷️ สถานะลูกค้า: ทั้งหมด</span><span>▾</span></button><div id="fcsPanel" class="box hide" style="margin:6px 0 0;padding:8px 10px"></div></div>
       <select id="fGrp"></select>
       <select id="fDist"></select>
       <select id="fSort"></select>
@@ -361,6 +362,7 @@ function buildFilters(){
 function applyFilters(){
   const f=S.filt; const q=f.q.trim().toLowerCase();
   let v=S.all.filter(c=>{
+    if(f.cs&&f.cs.size&&!f.cs.has((c.u&&c.u.cust_status)||'__none'))return false;
     if(f.grp&&c.grp!==f.grp)return false; if(f.dist&&V(c,'dist')!==f.dist)return false;
     if(f.sf){if(f.sf==='__none'){if(c.sf)return false}else if(c.sf!==f.sf)return false}
     switch(f.status){case'notyet':if(checked(c))return false;break;case'done':if(!checked(c))return false;break;case'due':if(!due(c))return false;break;
@@ -374,6 +376,17 @@ function applyFilters(){
   else v.sort(cmp[f.sort==='near'?'name':f.sort]);
   S.view=v;S.page=1;renderList();
 }
+
+/* ตัวกรองสถานะลูกค้าแบบเลือกได้หลายค่า */
+function csLabel(){const n=S.filt.cs?S.filt.cs.size:0;$('#fcsTxt').textContent=n?`🏷️ สถานะลูกค้า: เลือก ${n} สถานะ`:'🏷️ สถานะลูกค้า: ทั้งหมด';$('#fcsBtn').style.borderColor=n?'#0168B5':'';$('#fcsBtn').style.color=n?'#0168B5':''}
+function csRender(){
+  const cnt={};S.all.forEach(c=>{const k=(c.u&&c.u.cust_status)||'__none';cnt[k]=(cnt[k]||0)+1});
+  const opts=[...CUST_STATUS,'__none'],cs=S.filt.cs||(S.filt.cs=new Set());
+  $('#fcsPanel').innerHTML=opts.map(o=>`<label style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid #eee"><input type="checkbox" data-cs="${esc(o)}" ${cs.has(o)?'checked':''} style="width:20px;height:20px"><span style="flex:1">${o==='__none'?'ยังไม่ได้ระบุสถานะ':esc(o)}</span><b class="mut">${fmt(cnt[o]||0)}</b></label>`).join('')+`<div class="acts" style="margin-top:8px"><button type="button" class="btn grey" id="fcsClr">ล้างที่เลือก</button><button type="button" class="btn red" id="fcsOk">ตกลง</button></div>`;
+  $('#fcsPanel').querySelectorAll('[data-cs]').forEach(x=>x.onchange=()=>{x.checked?cs.add(x.dataset.cs):cs.delete(x.dataset.cs);csLabel();applyFilters()});
+  $('#fcsClr').onclick=()=>{cs.clear();csRender();csLabel();applyFilters()};$('#fcsOk').onclick=()=>$('#fcsPanel').classList.add('hide');
+}
+$('#fcsBtn').onclick=()=>{const p=$('#fcsPanel');if(p.classList.contains('hide')){csRender();p.classList.remove('hide')}else p.classList.add('hide')};
 function renderList(){
   const n=S.page*40,v=S.view.slice(0,n);
   const done=S.view.filter(checked).length;
