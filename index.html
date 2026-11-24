@@ -114,8 +114,9 @@ table.t{width:100%;border-collapse:collapse;font-size:13px}table.t th,table.t td
       <div class="full" id="fcsBox"><button type="button" class="btn ghost" id="fcsBtn" style="width:100%;text-align:left;display:flex;justify-content:space-between"><span id="fcsTxt">🏷️ สถานะลูกค้า: ทั้งหมด</span><span>▾</span></button><div id="fcsPanel" class="box hide" style="margin:6px 0 0;padding:8px 10px"></div></div>
       <select id="fGrp"></select>
       <select id="fDist"></select>
-      <select id="fSort"></select>
       <select id="fSf" class="full hide"></select>
+      <select id="fSort" class="hide"></select>
+      <div class="full" id="fsrBox"><button type="button" class="btn ghost" id="fsrBtn" style="width:100%;text-align:left;display:flex;justify-content:space-between;border-color:#0168B5;color:#0168B5"><span id="fsrTxt">↕️ เรียง</span><span>▾</span></button><div id="fsrPanel" class="box hide" style="margin:6px 0 0;padding:8px 10px"></div></div>
     </div>
     <div class="count"><span id="cntTxt"></span><span id="cntSub"></span></div>
     <div id="list"></div>
@@ -379,9 +380,17 @@ function applyFilters(){
     due:(a,b)=>(a.u?.next_follow||'9')>(b.u?.next_follow||'9')?1:-1,last:(a,b)=>(b.u?.lastVisit||'').localeCompare(a.u?.lastVisit||'')};
   if(f.sort==='near'&&S.pos){v.forEach(c=>{const p=shopPin(c);c._d=p?hav(S.pos.lat,S.pos.lng,p.lat,p.lng):1e12});v.sort((a,b)=>a._d-b._d)}
   else v.sort(cmp[f.sort==='near'?'name':f.sort]);
-  S.view=v;S.page=1;renderList();
+  S.view=v;S.page=1;if(typeof srLabel==='function')srLabel();renderList();
 }
 
+
+/* ปุ่มเรียงลำดับ (หน้าตาเดียวกับตัวกรองสถานะ) */
+function srLabel(){const o=SORT_OPTS.find(x=>x[0]===S.filt.sort)||SORT_OPTS[0];$('#fsrTxt').textContent='↕️ '+o[1]}
+function srRender(){
+  $('#fsrPanel').innerHTML=SORT_OPTS.map(([v,l])=>`<label style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #eee;cursor:pointer"><input type="radio" name="fsr" value="${v}" ${S.filt.sort===v?'checked':''} style="width:20px;height:20px"><span style="flex:1;${S.filt.sort===v?'font-weight:700;color:#0168B5':''}">${esc(l.replace('เรียง: ',''))}</span></label>`).join('');
+  $('#fsrPanel').querySelectorAll('input').forEach(x=>x.onchange=()=>{const sel=$('#fSort');sel.value=x.value;sel.dispatchEvent(new Event('change'));$('#fsrPanel').classList.add('hide');srLabel()});
+}
+$('#fsrBtn').onclick=()=>{const p=$('#fsrPanel');if(p.classList.contains('hide')){srRender();p.classList.remove('hide')}else p.classList.add('hide')};
 /* ตัวกรองสถานะลูกค้าแบบเลือกได้หลายค่า */
 function csLabel(){const n=S.filt.cs?S.filt.cs.size:0;$('#fcsTxt').textContent=n?`🏷️ สถานะลูกค้า: เลือก ${n} สถานะ`:'🏷️ สถานะลูกค้า: ทั้งหมด';$('#fcsBtn').style.borderColor=n?'#0168B5':'';$('#fcsBtn').style.color=n?'#0168B5':''}
 function csRender(){
