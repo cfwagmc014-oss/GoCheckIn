@@ -21,6 +21,8 @@ header.top .chip{background:rgba(255,255,255,.18);border-radius:99px;padding:4px
 .wrap{max-width:760px;margin:0 auto;padding:10px 12px 90px}
 .filters{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px}
 .filters .full{grid-column:1/-1}
+.filters #fSf.hide+#fGrp{grid-column:1/-1}
+.filters #fSf:not(.hide){display:block}
 input[type=search],input[type=text],input[type=tel],input[type=date],input[type=password],select,textarea{width:100%;border:1px solid var(--line);background:#fff;border-radius:10px;padding:10px 11px;outline:none}
 input:focus,select:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(1,104,181,.15)}
 textarea{min-height:70px;resize:vertical}
@@ -110,11 +112,12 @@ table.t{width:100%;border-collapse:collapse;font-size:13px}table.t th,table.t td
   <div id="pList" class="wrap">
     <div class="filters">
       <input class="full" id="fQ" type="search" placeholder="ค้นหา ชื่อ / ร้าน / รหัสสมาชิก / เบอร์ / ที่อยู่">
-      <select id="fStatus"></select>
-      <div class="full" id="fcsBox"><button type="button" class="btn ghost" id="fcsBtn" style="width:100%;text-align:left;display:flex;justify-content:space-between"><span id="fcsTxt">🏷️ สถานะลูกค้า: ทั้งหมด</span><span>▾</span></button><div id="fcsPanel" class="box hide" style="margin:6px 0 0;padding:8px 10px"></div></div>
+      <select id="fSf" class="hide"></select>
       <select id="fGrp"></select>
       <select id="fDist"></select>
-      <select id="fSf" class="full hide"></select>
+      <div id="fcsBox"><button type="button" class="btn ghost" id="fcsBtn" style="width:100%;text-align:left;display:flex;justify-content:space-between"><span id="fcsTxt">🏷️ สถานะ: ทั้งหมด</span><span>▾</span></button></div>
+      <div id="fcsPanel" class="box hide full" style="margin:0;padding:8px 10px"></div>
+      <select id="fStatus" class="full"></select>
       <select id="fSort" class="hide"></select>
       <div class="full" id="fsrBox"><button type="button" class="btn ghost" id="fsrBtn" style="width:100%;text-align:left;display:flex;justify-content:space-between;border-color:#0168B5;color:#0168B5"><span id="fsrTxt">↕️ เรียง</span><span>▾</span></button><div id="fsrPanel" class="box hide" style="margin:6px 0 0;padding:8px 10px"></div></div>
     </div>
@@ -392,7 +395,7 @@ function srRender(){
 }
 $('#fsrBtn').onclick=()=>{const p=$('#fsrPanel');if(p.classList.contains('hide')){srRender();p.classList.remove('hide')}else p.classList.add('hide')};
 /* ตัวกรองสถานะลูกค้าแบบเลือกได้หลายค่า */
-function csLabel(){const n=S.filt.cs?S.filt.cs.size:0;$('#fcsTxt').textContent=n?`🏷️ สถานะลูกค้า: เลือก ${n} สถานะ`:'🏷️ สถานะลูกค้า: ทั้งหมด';$('#fcsBtn').style.borderColor=n?'#0168B5':'';$('#fcsBtn').style.color=n?'#0168B5':''}
+function csLabel(){const n=S.filt.cs?S.filt.cs.size:0;$('#fcsTxt').textContent=n?`🏷️ สถานะ: เลือก ${n}`:'🏷️ สถานะ: ทั้งหมด';$('#fcsBtn').style.borderColor=n?'#0168B5':'';$('#fcsBtn').style.color=n?'#0168B5':''}
 function csRender(){
   const cnt={};S.all.forEach(c=>{const k=(c.u&&c.u.cust_status)||'__none';cnt[k]=(cnt[k]||0)+1});
   const opts=[...CUST_STATUS,'__none'],cs=S.filt.cs||(S.filt.cs=new Set());
