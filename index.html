@@ -178,6 +178,11 @@ const ST_GROUPS=[['🟢 กลุ่มลูกค้าที่เปิด�
 const ST_OLD={'เปิดกิจการ - ซื้อกินใช้เท่านั้น':'เป็นผู้ประกอบการ - ซื้อกินซื้อใช้','ปิดชั่วคราว':ST_TEMP};
 const normSt=v=>ST_OLD[v]||v;
 const NOT_BUY = ['ราคาสูงกว่าที่อื่น','ใช้ซัพพลายเออร์ประจำ','สินค้าไม่ครบ','ไม่สะดวกเดินทาง/ไม่มีรถ','ต้องการเครดิต','ปริมาณซื้อน้อย','ยังไม่รู้จัก/ไม่เคยใช้บริการ','อื่นๆ'];
+const VR_GROUPS=[['🟢 ได้พบ/ได้คุยกับร้าน',VISIT_RESULTS.slice(0,2)],['🔴 ไม่พบ/ติดต่อไม่ได้',VISIT_RESULTS.slice(2)]];
+const NB_GROUPS=[['💰 ด้านราคา/เงื่อนไขการค้า',['ราคาสูงกว่าที่อื่น','ต้องการเครดิต']],['📦 ด้านสินค้า/บริการ',['สินค้าไม่ครบ','ไม่สะดวกเดินทาง/ไม่มีรถ']],['🛒 ด้านพฤติกรรมลูกค้า',['ใช้ซัพพลายเออร์ประจำ','ปริมาณซื้อน้อย','ยังไม่รู้จัก/ไม่เคยใช้บริการ']],['➕ อื่นๆ',['อื่นๆ']]];
+const grpBars=(G,arr)=>{const m={};arr.filter(Boolean).forEach(x=>m[x]=(m[x]||0)+1);const known=new Set(G.flatMap(g=>g[1])),extra=Object.keys(m).filter(k=>!known.has(k)).map(k=>k);
+  const gs=extra.length?[...G,['➖ ค่าอื่นที่ไม่อยู่ในรายการ',extra]]:G;const mx=Math.max(1,...Object.values(m));
+  return gs.map(([t,l])=>`<div style="font-weight:700;color:var(--blue,#0168B5);padding:8px 0 2px;font-size:13px">${t}</div>`+l.map(k=>`<div class="hbar"><span class="l">${esc(k)}</span><span class="p"><i style="width:${(m[k]||0)/mx*100}%"></i></span><span class="n">${fmt(m[k]||0)}</span></div>`).join('')).join('')};
 const CHANNELS = [['CHECKIN','ลงพื้นที่ (Check-in GPS)'],['CALL','โทรศัพท์'],['LINE','LINE']];
 const MONTHS = ['พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.*'];
 const REC_COLS = ['ts','type','id','user','channel','visit_result','cust_status','not_buy_reason','interest','competitor','contact','phone','line','biz','house','road','subd','dist','prov','post','shop_lat','shop_lng','ci_lat','ci_lng','ci_acc','ci_dist','note','next_follow','photo','device','bp_total','bp_c1','bp_c2','bp_c3','bp_c4','bp_c5','bp_freq','bp_pay'];
@@ -502,9 +507,9 @@ function openForm(c,mode){
     <div class="bd">
       ${isCi?`<div class="field"><label>ช่องทางติดตาม</label><select id="f_channel">${CHANNELS.map(([v,l])=>`<option value="${v}">${l}</option>`).join('')}</select></div>
       <div class="gps" id="gpsBox">กำลังหาตำแหน่ง GPS…</div>
-      <div class="field"><label>ผลการติดตาม *</label><select id="f_visit_result">${opt(VISIT_RESULTS,'')}</select></div>`:''}
+      <div class="field"><label>ผลการติดตาม *</label><select id="f_visit_result">${optG(VR_GROUPS,'')}</select></div>`:''}
       <div class="field"><label>สถานะลูกค้าปัจจุบัน</label><select id="f_cust_status">${optG(ST_GROUPS,V(c,'cust_status'))}</select></div>
-      <div class="field" id="nbWrap"><label>เหตุผลที่ไม่ซื้อ / ซื้อน้อย</label><select id="f_not_buy_reason">${opt(NOT_BUY,V(c,'not_buy_reason'))}</select></div>
+      <div class="field" id="nbWrap"><label>เหตุผลที่ไม่ซื้อ / ซื้อน้อย</label><select id="f_not_buy_reason">${optG(NB_GROUPS,V(c,'not_buy_reason'))}</select></div>
       <div class="field"><label>ซื้อจากที่ไหนอยู่ (คู่แข่ง/ซัพพลายเออร์)</label><input id="f_competitor" value="${esc(V(c,'competitor'))}"></div>
       <div class="field"><label>ความสนใจ</label><div class="chk"><label><input type="checkbox" class="int" value="เครดิต" ${interest.includes('เครดิต')?'checked':''}>เครดิต</label><label><input type="checkbox" class="int" value="จัดส่ง" ${interest.includes('จัดส่ง')?'checked':''}>จัดส่งสินค้า</label><label><input type="checkbox" class="int" value="สินค้าพิเศษ" ${interest.includes('สินค้าพิเศษ')?'checked':''}>สินค้าโปร/พิเศษ</label></div></div>
       <div class="two"><div class="field"><label>นัดติดตามครั้งต่อไป</label><input type="date" id="f_next_follow" value="${esc(u.next_follow||'')}"></div>
@@ -613,9 +618,9 @@ function renderDash(){
       const T=L.reduce((a,x)=>a+x.b.total,0),G=L.reduce((a,x)=>a+x.b.gap,0),W=L.reduce((a,x)=>a+x.b.gw,0);
       return `<div class="box"><h3>💰 Buying Potential (${fmt(L.length)} ราย)</h3><div class="kv"><span>Potential รวม/เดือน</span><span><b>${fmt(T)}</b> บ.</span><span>ซื้อกับ GW เฉลี่ย</span><span>${fmt(W)} บ.</span><span>Share of Wallet รวม</span><span><b>${Math.round(W*100/T)}%</b></span><span>ช่องว่างโอกาส</span><span><b>${fmt(G)}</b> บ./เดือน</span></div>
       <h3 style="margin-top:12px">Top 10 ช่องว่างโอกาสสูงสุด (แตะเพื่อเปิด)</h3>${L.sort((a,b)=>b.b.gap-a.b.gap).slice(0,10).map(x=>`<div class="hbar toprow" data-id="${esc(x.c.id)}" style="cursor:pointer"><span class="l">${esc(title(x.c))}</span><span class="p"><i style="width:${Math.min(100,x.b.share)}%;background:var(--ok)"></i></span><span class="n" style="width:auto">${fmt(x.b.gap)}</span></div>`).join('')}</div>`})()}
-    ${sfTbl}<div class="box"><h3>ผลการติดตามล่าสุด</h3>${bars(cnt(A.map(c=>c.u?.lastRes)))}</div>
+    ${sfTbl}<div class="box"><h3>ผลการติดตามล่าสุด</h3>${grpBars(VR_GROUPS,A.map(c=>c.u?.lastRes))}</div>
     <div class="box"><h3>สถานะลูกค้าปัจจุบัน</h3>${(()=>{const m=Object.fromEntries(cnt(A.map(c=>c.u?.cust_status)));const mx=Math.max(1,...Object.values(m));return ST_GROUPS.map(([t,l])=>`<div style="font-weight:700;color:var(--blue,#0168B5);padding:8px 0 2px;font-size:13px">${t}</div>`+l.map(k=>`<div class="hbar"><span class="l">${esc(k)}</span><span class="p"><i style="width:${(m[k]||0)/mx*100}%"></i></span><span class="n">${fmt(m[k]||0)}</span></div>`).join('')).join('')})()}</div>
-    <div class="box"><h3>เหตุผลที่ไม่ซื้อ</h3>${bars(cnt(A.map(c=>c.u?.not_buy_reason)))}</div>`;
+    <div class="box"><h3>เหตุผลที่ไม่ซื้อ</h3>${grpBars(NB_GROUPS,A.map(c=>c.u?.not_buy_reason))}</div>`;
   fillTravelBox();
   $('#dsRef').onclick=async()=>{S.travel=null;if(S.user.sf==='ALL')await syncRecent();renderDash()};
 }
