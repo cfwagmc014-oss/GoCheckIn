@@ -946,11 +946,13 @@ async function fillAdminApprInner(box,d,op,silent){
     <div class="acts">${p.status==='SUBMITTED'?`<button class="btn red" data-ad="ok" data-id="${esc(p.plan_id)}">✅ อนุมัติ</button><button class="btn grey" data-ad="no" data-id="${esc(p.plan_id)}">❌ ส่งกลับ</button>`:''}<button class="btn grey" data-ad="clr" data-id="${esc(p.plan_id)}">🗑️ ล้างแผน (ให้เป็น 0)</button>${p.status==='APPROVED'?`<button class="btn ghost" data-ad="gt" data-id="${esc(p.plan_id)}">🔗 สร้างงานใน GO TASK</button>`:''}</div></details>`).join('');
   box.innerHTML=`<div class="box"><h3>📋 อนุมัติ/ติดตามแผนเยี่ยม${pend?` <span class="tag warn">รออนุมัติ ${pend}</span>`:''}</h3>
     <div class="mut" style="margin:-4px 0 6px">⏱️ อัปเดตอัตโนมัติทุก 15 วินาที · ล่าสุด ${new Date().toLocaleTimeString('th-TH')} <a href="#" id="apRef">🔄 รีเฟรช</a></div>
-    <div class="field"><input type="date" id="apD" value="${d}"></div><div style="overflow:auto"><table class="t"><tr><th>SF</th><th>สถานะ</th><th>แผน</th><th>เยี่ยม</th><th>%</th><th>นอกแผน</th><th>Check-in แรก</th><th>กม.</th><th>ปิดงาน</th></tr>${rows}</table></div>
+    <div class="field" style="display:flex;align-items:center;gap:6px"><button class="btn ghost" id="apPrev" style="width:auto;padding:8px 12px;font-size:15px">◀</button><input type="date" id="apD" value="${d}" style="flex:1"><button class="btn ghost" id="apNext" style="width:auto;padding:8px 12px;font-size:15px">▶</button></div><div style="overflow:auto"><table class="t"><tr><th>SF</th><th>สถานะ</th><th>แผน</th><th>เยี่ยม</th><th>%</th><th>นอกแผน</th><th>Check-in แรก</th><th>กม.</th><th>ปิดงาน</th></tr>${rows}</table></div>
     <p class="mut" style="margin:6px 0 0">กม. = ระยะทางจริงจากพิกัด Check-in ของวันนั้น (${branchPt()?routeTxt():'ระหว่างร้านเท่านั้น — ยังไม่ได้ตั้งพิกัดสาขา'}) · รวมวันนี้ ${km1(sfs.reduce((a,x)=>a+(trvOf(T,x,d)?trvOf(T,x,d).m:0),0))} กม.</p>
     <div class="acts"><button class="btn ghost" id="apX">📗 Excel ติดตามแผน 30 วัน</button></div></div>${det}`;
   $('#apRef').onclick=e=>{e.preventDefault();S.travel=null;fillAdminAppr(true)};
   $('#apD').onchange=e=>{S.apprDate=e.target.value||todayStr();fillAdminAppr()};
+  $('#apPrev').onclick=()=>{S.apprDate=addDays(d,-1);fillAdminAppr()};
+  $('#apNext').onclick=()=>{S.apprDate=addDays(d,1);fillAdminAppr()};
   $('#apX').onclick=async()=>{try{await loadXlsx();showLoading('กำลังรวบรวม…');const t=todayStr(),k=await api('planList',{sf:'ALL',from:addDays(t,-30),to:t});hideLoading();
     let T2=[];try{T2=await getTravel()}catch(e){}
     const A=[['วันที่','SF','สถานะ','จำนวนแผน','เยี่ยมตามแผน','% ตามแผน','นอกแผน','Check-in แรก','ระยะทาง (กม.)','ปิดงาน','รูปยืนยัน','ส่งเมื่อ','ตัดสินเมื่อ','หมายเหตุ']],M=[['วันที่','SF','รหัสสมาชิก','ชื่อร้าน','ตำบล/อำเภอ','ละติจูด','ลองจิจูด']],L=[['วันที่','SF','ลำดับในแผน','รหัสสมาชิก','ชื่อร้าน','ตำบล/อำเภอ','ละติจูด','ลองจิจูด','เยี่ยมแล้ว']];
