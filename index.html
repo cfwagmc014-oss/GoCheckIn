@@ -747,7 +747,7 @@ const PD=()=>{const t=todayStr();return S.planDate&&S.planDate>t&&S.planDate<=ad
 const isPD=c=>(c.u?.lastVisit||'').startsWith(PD());
 const isFuture=()=>PD()>todayStr();
 let planN=(v=>PLAN_N.includes(v)?v:12)(lsGet('gw_plan_n',12));
-const PLAN_REST=[0,30,45,60,90];let planRest=lsGet('gw_plan_rest',60);
+const PLAN_REST=[0,30,45,60,90];let planRest=lsGet('gw_plan_rest45',45);
 // ร้านที่เพิ่งเยี่ยมภายใน planRest วัน (และไม่ถึงวันนัดติดตาม) จะไม่ถูกจัดเข้าแผน
 const recentVisit=c=>{if(!planRest)return false;const u=c.u||{};if(!u.visits||!u.lastVisit)return false;if(u.next_follow&&u.next_follow<=PD())return false;return dayDiff(u.lastVisit.slice(0,10),PD())<planRest};
 const planKey=sf=>'gw_plan_'+sf+'_'+PD();
@@ -791,12 +791,34 @@ function orderPlan(items,pos){
     if(cur)last=cur;rest.forEach(x=>out.push(x))});
   return out;
 }
+// เลือกร้านเข้าแผนแบบกระจุก: เอาร้านคะแนนสูงสุดเป็นศูนย์กลาง แล้วเติมร้านที่อยู่ใกล้ (รัศมี 3→5→8→15 กม.) เรียงตามคะแนน
+const PLAN_TIERS=[3000,5000,8000,15000,1e12];
+function clusterPick(cands,need,keep){
+  if(need<=0||!cands.length)return[];
+  const kp=keep.map(id=>S.byId[id]).filter(Boolean).map(shopPin).filter(Boolean);
+  const seed=cands[0],ap=kp[0]||shopPin(seed.c),ak=areaKey(seed.c);
+  const dist=x=>{const q=shopPin(x.c);if(ap&&q)return hav(ap.lat,ap.lng,q.lat,q.lng);return areaKey(x.c)===ak?1500:1e11};
+  const out=[],used=new Set(),take=(f)=>{for(const x of cands){if(out.length>=need)return;if(used.has(x.c.id)||!f(x))continue;used.add(x.c.id);out.push(x)}};
+  const pos=x=>x.sc>0;
+  PLAN_TIERS.forEach(r=>take(x=>pos(x)&&dist(x)<=r));   // ร้านที่มีคะแนน เรียงจากใกล้ศูนย์กลางเป็นวงๆ
+  take(()=>true);                                       // เติมให้ครบด้วยร้านที่เหลือ
+  return out;
+}
 function buildPlan(sf,n,keep,skipped,area){
   const keepSet=new Set(keep),ex=new Set([...keep,...skipped]);
-  const picks=planPool(sf,ex,area).slice(0,Math.max(0,n-keep.length));
+  const need=Math.max(0,n-keep.length);
+  let picks=clusterPick(planPool(sf,ex,area),need,keep);
+  // พอร์ตครบรอบแล้ว (ร้านที่เหลือหมดแล้วแต่ยังไม่ครบจำนวน) → เริ่มรอบใหม่ด้วยร้านที่ไม่ได้เยี่ยมนานที่สุด
+  if(picks.length<need&&planRest){const have=new Set([...ex,...picks.map(x=>x.c.id)]);
+    const old=S.all.filter(c=>c.sf===sf&&!have.has(c.id)&&!isToday(c)&&(!area||areaKey(c)===area)&&recentVisit(c)&&planScore(c,1)!==null)
+      .sort((a,b)=>(a.u.lastVisit||'').localeCompare(b.u.lastVisit||'')).map(c=>({c,sc:0}));
+    picks=picks.concat(clusterPick(old,need-picks.length,[...keep,...picks.map(x=>x.c.id)]).map(x=>({...x,round2:true})))}
   const ordered=orderPlan(picks,S.planPos);
   return{date:PD(),sf,n,rest:planRest,area:area||'',manual:keep.filter(id=>!isPD(S.byId[id])),ids:[...keep,...ordered.map(x=>x.c.id)],skipped};
 }
+function covTxt(sf){const all=S.all.filter(c=>c.sf===sf&&planScore(c,1)!==null),t=PD();
+  const v=all.filter(c=>{const u=c.u||{};return u.visits&&u.lastVisit&&dayDiff(u.lastVisit.slice(0,10),t)<planRest}).length;
+  return `${fmt(v)}/${fmt(all.length)} ร้าน (${all.length?Math.round(v*100/all.length):0}%) ใน ${planRest} วัน · เหลือ ${fmt(all.length-v)} ร้าน`}
 function renderPlanBody(regen){
   const el=$('#pPlan');if(!el||!S.all.length)return;
   const sf=planScope();
@@ -830,7 +852,7 @@ function renderPlanBody(regen){
     <div class="acts"><button class="btn ghost" id="plPos">📡 เรียงจากตำแหน่งฉัน</button><button class="btn grey" id="plRegen">🔄 สร้างแผนใหม่</button><button class="btn grey" id="plAdd">➕ เพิ่ม 1 ร้าน</button><button class="btn grey" id="plExp">⬇️ CSV</button></div>
     <div id="plTrv" class="mut" style="margin-top:8px"></div>
     <div class="field" style="margin-top:12px;padding:12px;border:2px solid #0168B5;border-radius:12px;background:#EAF3FB;box-shadow:0 2px 8px rgba(1,104,181,.18)"><div style="font-weight:700;color:#0168B5;margin-bottom:6px;font-size:15px">➕ เพิ่มลูกค้าเข้าแผนเอง</div><input id="plQ" placeholder="🔎 พิมพ์ชื่อ/รหัสลูกค้า (อย่างน้อย 2 ตัวอักษร)" autocomplete="off" style="font-size:16px;padding:13px 14px;border:2px solid #0168B5;border-radius:10px;background:#fff;width:100%;box-sizing:border-box"><div id="plQR" style="background:#fff;border-radius:8px;padding:0 8px;margin-top:6px"></div></div>
-    <p class="mut" style="margin:8px 0 0">${planRest?`🚫 ตัดร้านที่ Check-in ไปแล้วภายใน ${planRest} วัน ออกจากแผน ${fmt(S.all.filter(c=>c.sf===sf&&recentVisit(c)).length)} ร้าน (ยกเว้นร้านที่ถึงวันนัดติดตาม)<br>`:''}จัดลำดับจาก: นัดติดตามถึงกำหนด · ยังไม่เคยเยี่ยม · หยุดซื้อ · ช่องว่างโอกาส · ยอดซื้อสูง · ไม่ได้เยี่ยมนาน และจัดกลุ่มตามตำบลให้ใกล้กัน</p></div>`
+    <p class="mut" style="margin:8px 0 0">${planRest?`🚫 ตัดร้านที่ Check-in ไปแล้วภายใน ${planRest} วัน ออกจากแผน ${fmt(S.all.filter(c=>c.sf===sf&&recentVisit(c)).length)} ร้าน (ยกเว้นร้านที่ถึงวันนัดติดตาม)<br>📊 เยี่ยมครอบคลุมพอร์ตแล้ว ${covTxt(sf)}<br>`:''}จัดลำดับจาก: นัดติดตามถึงกำหนด · ยังไม่เคยเยี่ยม · หยุดซื้อ · ช่องว่างโอกาส · ยอดซื้อสูง · ไม่ได้เยี่ยมนาน และเลือกร้านที่อยู่ใกล้กัน (รัศมี 3 กม. ขยายเมื่อร้านไม่พอ) เพื่อไม่ให้เดินทางกระจาย และจัดกลุ่มตามตำบลให้ใกล้กัน</p></div>`
     +(rows||'<div class="box mut" style="text-align:center">ไม่มีร้านที่ต้องเยี่ยมเพิ่มวันนี้ 🎉</div>');
   bindPlan(sf,st);fillPlanTravel(sf,done,items.length);
 }
@@ -901,7 +923,7 @@ function bindPlan(sf,st){
     box.innerHTML=L.map(c=>{const inP=st.ids.includes(c.id),u=c.u||{},d=u.lastVisit?dayDiff(u.lastVisit.slice(0,10),PD()):null;
       return `<div class="qr" style="display:flex;gap:8px;align-items:center;padding:7px 0;border-bottom:1px solid #eee"><div style="flex:1;min-width:0"><div class="t">${esc(title(c))}</div><div class="s mut">${esc(c.id)} · ${esc([V(c,'subd'),V(c,'dist')].filter(Boolean).join(' / '))}${d!=null?` · เยี่ยมล่าสุด ${d} วันก่อน`:''}</div></div>${inP?'<span class="tag ok">อยู่ในแผน</span>':`<button class="btn red" data-add="${esc(c.id)}" style="width:auto;padding:6px 10px">➕ เพิ่ม</button>`}</div>`}).join('')||'<div class="mut" style="padding:6px 0">ไม่พบลูกค้าในพอร์ตนี้</div>'};
   const ar=$('#plArea',el);if(ar)ar.onchange=e=>{lsSet('gw_plan_area_'+sf,e.target.value);renderPlan()};
-  $('#plRest',el).onchange=e=>{planRest=+e.target.value;lsSet('gw_plan_rest',planRest);renderPlan()};
+  $('#plRest',el).onchange=e=>{planRest=+e.target.value;lsSet('gw_plan_rest45',planRest);renderPlan()};
   $('#plN',el).onchange=e=>{planN=+e.target.value;lsSet('gw_plan_n',planN);renderPlan()};
   if(!sf)return;
   $('#plRegen',el).onclick=()=>{if(confirm('สร้างแผนวันนี้ใหม่? (ร้านที่เยี่ยมแล้วยังอยู่ในแผน)'))renderPlan(true)};
