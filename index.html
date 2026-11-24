@@ -79,6 +79,30 @@ nav.bottom button.on{color:var(--red);font-weight:700}
 .gps.ok{background:#e1f4e9}.gps.bad{background:#fde3e4}
 details{background:#fff;border-radius:var(--r);padding:10px 12px;margin-bottom:10px}
 summary{font-weight:700;cursor:pointer}
+
+/* ===== Dashboard (การ์ดสไตล์ใหม่) ===== */
+.dsg{display:grid;grid-template-columns:1fr;gap:12px}.dsg .wide{grid-column:1/-1}
+@media(min-width:900px){.dsg{grid-template-columns:1fr 1fr}#pDash{max-width:1100px}}
+.dc{background:#fff;border-radius:18px;padding:14px 14px 12px;box-shadow:0 2px 10px rgba(20,30,60,.06);margin:0}
+.dc h3{margin:0 0 10px;font-size:14.5px;color:var(--ink);font-weight:700}
+.dsgh{font-weight:700;font-size:12.5px;padding:10px 0 2px;letter-spacing:.2px}
+.dshero{background:linear-gradient(135deg,#0168B5 0%,#014a82 60%,#0a2f57 100%);color:#fff}
+.dshd{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:6px}.dshd small{font-size:16px;font-weight:700;display:block}
+.dsref{background:rgba(255,255,255,.18);color:#fff;border:0;border-radius:999px;padding:7px 14px;font:inherit;font-size:13px;cursor:pointer}
+.dsh3{display:flex;gap:18px;flex-wrap:wrap;justify-content:center}.dsh3 div{text-align:center;min-width:84px}.dsh3 b{display:block;font-size:26px}.dsh3 span{font-size:12px;opacity:.85}
+.dstiles{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}@media(min-width:900px){.dstiles{grid-template-columns:repeat(4,1fr)}}
+.dstile{border-radius:18px;padding:12px 14px;color:#fff;position:relative;overflow:hidden;box-shadow:0 4px 12px rgba(20,30,60,.12)}
+.dstile .ic{position:absolute;right:10px;top:8px;font-size:22px;opacity:.9}.dstile b{display:block;font-size:28px;margin-top:6px}.dstile span{font-size:12.5px;opacity:.95}
+.dstile.g{background:linear-gradient(135deg,#27b567,#1e8e4e)}.dstile.a{background:linear-gradient(135deg,#f6b21a,#e08a00)}.dstile.b{background:linear-gradient(135deg,#3b9be0,#0168B5)}.dstile.p{background:linear-gradient(135deg,#8a6cf0,#5a3fc4)}
+.dstile.a.hot{background:linear-gradient(135deg,#e5484d,#C0272D)}
+.dsbar{height:6px;background:rgba(255,255,255,.3);border-radius:9px;margin-top:8px;overflow:hidden}.dsbar i{display:block;height:100%;background:#fff;border-radius:9px}
+.dsbp{background:linear-gradient(135deg,#0168B5,#0a3f8f);color:#fff}
+.dsbpg{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}@media(min-width:700px){.dsbpg{grid-template-columns:repeat(4,1fr)}}
+.dsbpg span{display:block;font-size:12px;opacity:.85}.dsbpg b{font-size:22px}
+.dsrk{width:20px;height:20px;border-radius:50%;background:#eef2fa;color:var(--blue);font-size:11px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;flex:none}
+.dspill{display:inline-block;padding:2px 9px;border-radius:999px;font-size:12px;font-weight:700}.dspill.g{background:#dff3e8;color:#1e8e4e}.dspill.a{background:#fff0cf;color:#a86400}.dspill.r{background:#fde3e4;color:#C0272D}
+table.dst th{color:var(--mut);font-weight:600;font-size:12px;white-space:nowrap}table.dst td{white-space:nowrap}
+.dc .hbar .p{height:9px}
 .kpis{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}
 .kpi{background:#fff;border-radius:var(--r);padding:12px}.kpi b{font-size:26px;display:block}.kpi span{font-size:12.5px;color:var(--mut)}
 .prog{height:9px;background:#e6e9f1;border-radius:9px;overflow:hidden}.prog i{display:block;height:100%;background:var(--ok)}
@@ -600,27 +624,45 @@ async function flushQueue(manual){
 window.addEventListener('online',()=>flushQueue());
 
 /* ============ DASHBOARD ============ */
+function dsDonut(parts,big,sub,size=132,track='#e6e9f1',ink='var(--ink)'){const T=parts.reduce((x,p)=>x+p.v,0);let off=25,seg='';
+  if(T>0)parts.forEach(p=>{const l=p.v*100/T;if(l>0){seg+=`<circle cx="21" cy="21" r="15.915" fill="none" stroke="${p.c}" stroke-width="5.2" stroke-dasharray="${l} ${100-l}" stroke-dashoffset="${off}"/>`;off-=l}});
+  return `<svg viewBox="0 0 42 42" width="${size}" height="${size}" style="flex:none"><circle cx="21" cy="21" r="15.915" fill="none" stroke="${track}" stroke-width="5.2"/>${seg}<text x="21" y="21.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="${ink}">${big}</text><text x="21" y="27" text-anchor="middle" font-size="2.9" fill="${ink}" opacity=".7">${sub||''}</text></svg>`}
+// การ์ดแบบกลุ่ม: โดนัทแบ่งตามกลุ่ม + แถบรายหัวข้อ (สีตามกลุ่ม)
+function dsGroup(title,icon,G,arr,colors,extraNone){
+  const m={};arr.forEach(x=>{const k=x||'__none';m[k]=(m[k]||0)+1});const known=new Set(G.flatMap(g=>g[1]));
+  const extra=Object.keys(m).filter(k=>k!=='__none'&&!known.has(k));const gs=extra.length?[...G,['➖ ค่าอื่นที่ไม่อยู่ในรายการ',extra]]:G;
+  const col=i=>colors[i]||'#8a93a6',sum=l=>l.reduce((x,k)=>x+(m[k]||0),0);
+  const tot=gs.reduce((x,[,l])=>x+sum(l),0),mx=Math.max(1,...Object.entries(m).filter(([k])=>k!=='__none').map(e=>e[1]));
+  const parts=gs.map(([,l],i)=>({v:sum(l),c:col(i)}));
+  const legend=gs.map(([t,l],i)=>`<div style="display:flex;align-items:center;gap:6px;margin:4px 0;font-size:13px"><i style="width:10px;height:10px;border-radius:3px;background:${col(i)};flex:none"></i><span style="flex:1">${esc(t.replace(/^[^ ]+ /,''))}</span><b>${fmt(sum(l))}</b><span class="mut" style="width:38px;text-align:right">${tot?Math.round(sum(l)*100/tot):0}%</span></div>`).join('');
+  const bars=gs.map(([t,l],i)=>`<div class="dsgh" style="color:${col(i)}">${t}</div>`+l.map(k=>`<div class="hbar"><span class="l">${esc(k)}</span><span class="p"><i style="width:${(m[k]||0)/mx*100}%;background:${col(i)}"></i></span><span class="n">${fmt(m[k]||0)}</span></div>`).join('')).join('');
+  return `<div class="dc"><h3>${icon} ${title}</h3><div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><div style="margin:0 auto">${dsDonut(parts,fmt(tot),'ลูกค้าที่มีข้อมูล')}</div><div style="flex:1;min-width:190px">${legend}${extraNone&&m.__none?`<div class="mut" style="margin-top:6px">ยังไม่ได้ระบุ ${fmt(m.__none)} ราย</div>`:''}</div></div><div style="margin-top:6px">${bars}</div></div>`}
 function renderDash(){
   const el=$('#pDash');if(!S.all.length){el.innerHTML='';return}
   const A=S.all,tot=A.length,ck=A.filter(checked).length,td=todayStr();
   const today=A.filter(c=>c.u?.lastVisit?.startsWith(td)).length,dueN=A.filter(due).length;
   const ph=A.filter(c=>V(c,'phone')).length,pn=A.filter(shopPin).length;
-  const cnt=(arr)=>{const m={};arr.filter(Boolean).forEach(x=>m[x]=(m[x]||0)+1);return Object.entries(m).sort((a,b)=>b[1]-a[1])};
-  const bars=(arr)=>{const mx=Math.max(1,...arr.map(a=>a[1]));return arr.map(([l,n])=>`<div class="hbar"><span class="l">${esc(l)}</span><span class="p"><i style="width:${n/mx*100}%"></i></span><span class="n">${fmt(n)}</span></div>`).join('')||'<span class="mut">ยังไม่มีข้อมูล</span>'};
+  const pc=n=>tot?Math.round(n*100/tot):0,pill=v=>`<span class="dspill ${v>=60?'g':v>=30?'a':'r'}">${v}%</span>`;
   let sfTbl='';
   if(S.user.sf==='ALL'){const m={};A.forEach(c=>{const k=c.sf||'—';const o=m[k]||(m[k]={t:0,c:0,d:0,td:0,p:0,pn:0,out:0});if(c.port==='OUT')o.out++;{const b=bpOf(c);if(b){o.bpT=(o.bpT||0)+b.total;o.bpW=(o.bpW||0)+b.gw}}o.t++;if(checked(c))o.c++;if(due(c))o.d++;if(c.u?.lastVisit?.startsWith(td))o.td++;if(V(c,'phone'))o.p++;if(shopPin(c))o.pn++});
-    sfTbl=`<div class="box"><h3>แยกตามพอร์ต</h3><div style="overflow:auto"><table class="t"><tr><th>SF</th><th>ลูกค้า</th><th>Check-in</th><th>%</th><th>วันนี้</th><th>ถึงนัด</th><th>มีเบอร์</th><th>มีพิกัด</th><th>🔴 รอตัดออก</th><th>SoW</th></tr>${Object.entries(m).sort().map(([k,o])=>`<tr><td>${k==='—'?'ไม่มี SF':sfShort(k)}</td><td>${fmt(o.t)}</td><td>${fmt(o.c)}</td><td>${Math.round(o.c*100/o.t)}%</td><td>${o.td}</td><td>${o.d}</td><td>${Math.round(o.p*100/o.t)}%</td><td>${Math.round(o.pn*100/o.t)}%</td><td>${o.out||'-'}</td><td>${o.bpT?Math.round(o.bpW*100/o.bpT)+'%':'-'}</td></tr>`).join('')}</table></div></div>`}
+    sfTbl=`<div class="dc wide"><h3>👥 แยกตามพอร์ต</h3><div style="overflow:auto"><table class="t dst"><tr><th>SF</th><th>ลูกค้า</th><th>Check-in</th><th>% ครอบคลุม</th><th>วันนี้</th><th>ถึงนัด</th><th>มีเบอร์</th><th>มีพิกัด</th><th>🔴 รอตัดออก</th><th>SoW</th></tr>${Object.entries(m).sort().map(([k,o])=>`<tr><td><b>${k==='—'?'ไม่มี SF':sfShort(k)}</b></td><td>${fmt(o.t)}</td><td>${fmt(o.c)}</td><td style="min-width:110px"><div style="display:flex;align-items:center;gap:6px;justify-content:flex-end"><span class="p" style="width:54px;height:7px;background:#e6e9f1;border-radius:9px;overflow:hidden;display:inline-block"><i style="display:block;height:100%;width:${Math.round(o.c*100/o.t)}%;background:var(--blue)"></i></span>${pill(Math.round(o.c*100/o.t))}</div></td><td>${o.td||'-'}</td><td>${o.d?`<b style="color:var(--red)">${o.d}</b>`:'-'}</td><td>${Math.round(o.p*100/o.t)}%</td><td>${Math.round(o.pn*100/o.t)}%</td><td>${o.out||'-'}</td><td>${o.bpT?Math.round(o.bpW*100/o.bpT)+'%':'-'}</td></tr>`).join('')}</table></div></div>`}
   S.dashTs=new Date().toLocaleTimeString('th-TH');
-  el.innerHTML=`<div class="acts" style="justify-content:space-between;align-items:center;margin:0 0 8px"><span class="mut">⏱️ อัปเดตอัตโนมัติ · ล่าสุด ${S.dashTs}</span><button class="btn ghost" id="dsRef" style="width:auto">🔄 รีเฟรช</button></div><div class="box" id="trvBox"><h3>🚗 การเดินทางรวม</h3><span class="mut">กำลังคำนวณ…</span></div><div class="kpis"><div class="kpi"><b>${fmt(tot)}</b><span>ลูกค้าในรายการ</span></div><div class="kpi"><b>${fmt(ck)}</b><span>Check-in แล้ว (${Math.round(ck*100/tot)}%)</span><div class="prog" style="margin-top:6px"><i style="width:${ck*100/tot}%"></i></div></div>
-    <div class="kpi"><b>${fmt(today)}</b><span>Check-in วันนี้</span></div><div class="kpi"><b style="color:${dueN?'var(--red)':'inherit'}">${fmt(dueN)}</b><span>ถึงกำหนดติดตาม</span></div>
-    <div class="kpi"><b>${Math.round(ph*100/tot)}%</b><span>มีเบอร์โทร</span></div><div class="kpi"><b>${Math.round(pn*100/tot)}%</b><span>มีพิกัดร้าน</span></div></div>
-    ${(()=>{const L=A.map(c=>({c,b:bpOf(c)})).filter(x=>x.b);if(!L.length)return '<div class="box"><h3>💰 Buying Potential</h3><span class="mut">ยังไม่มีข้อมูล Potential — เซลส์กรอกได้ในหน้า Check-in / แก้ไขข้อมูล</span></div>';
+  const tile=(cls,ic,big,lb,bar)=>`<div class="dstile ${cls}"><div class="ic">${ic}</div><b>${big}</b><span>${lb}</span>${bar==null?'':`<div class="dsbar"><i style="width:${Math.min(100,bar)}%"></i></div>`}</div>`;
+  const bpHtml=(()=>{const L=A.map(c=>({c,b:bpOf(c)})).filter(x=>x.b);if(!L.length)return '<div class="dc wide"><h3>💰 Buying Potential</h3><span class="mut">ยังไม่มีข้อมูล Potential — เซลส์กรอกได้ในหน้า Check-in / แก้ไขข้อมูล</span></div>';
       const T=L.reduce((a,x)=>a+x.b.total,0),G=L.reduce((a,x)=>a+x.b.gap,0),W=L.reduce((a,x)=>a+x.b.gw,0);
-      return `<div class="box"><h3>💰 Buying Potential (${fmt(L.length)} ราย)</h3><div class="kv"><span>Potential รวม/เดือน</span><span><b>${fmt(T)}</b> บ.</span><span>ซื้อกับ GW เฉลี่ย</span><span>${fmt(W)} บ.</span><span>Share of Wallet รวม</span><span><b>${Math.round(W*100/T)}%</b></span><span>ช่องว่างโอกาส</span><span><b>${fmt(G)}</b> บ./เดือน</span></div>
-      <h3 style="margin-top:12px">Top 10 ช่องว่างโอกาสสูงสุด (แตะเพื่อเปิด)</h3>${L.sort((a,b)=>b.b.gap-a.b.gap).slice(0,10).map(x=>`<div class="hbar toprow" data-id="${esc(x.c.id)}" style="cursor:pointer"><span class="l">${esc(title(x.c))}</span><span class="p"><i style="width:${Math.min(100,x.b.share)}%;background:var(--ok)"></i></span><span class="n" style="width:auto">${fmt(x.b.gap)}</span></div>`).join('')}</div>`})()}
-    ${sfTbl}<div class="box"><h3>ผลการติดตามล่าสุด</h3>${grpBars(VR_GROUPS,A.map(c=>c.u?.lastRes))}</div>
-    <div class="box"><h3>สถานะลูกค้าปัจจุบัน</h3>${(()=>{const m=Object.fromEntries(cnt(A.map(c=>c.u?.cust_status)));const mx=Math.max(1,...Object.values(m));return ST_GROUPS.map(([t,l])=>`<div style="font-weight:700;color:var(--blue,#0168B5);padding:8px 0 2px;font-size:13px">${t}</div>`+l.map(k=>`<div class="hbar"><span class="l">${esc(k)}</span><span class="p"><i style="width:${(m[k]||0)/mx*100}%"></i></span><span class="n">${fmt(m[k]||0)}</span></div>`).join('')).join('')})()}</div>
-    <div class="box"><h3>เหตุผลที่ไม่ซื้อ</h3>${grpBars(NB_GROUPS,A.map(c=>c.u?.not_buy_reason))}</div>`;
+      return `<div class="dc wide dsbp"><h3 style="color:#fff;opacity:.9">💰 Buying Potential · ${fmt(L.length)} ราย</h3><div class="dsbpg"><div><span>Potential รวม/เดือน</span><b>${fmt(T)}</b></div><div><span>ซื้อกับ GW เฉลี่ย</span><b>${fmt(W)}</b></div><div><span>Share of Wallet</span><b>${T?Math.round(W*100/T):0}%</b></div><div><span>ช่องว่างโอกาส/เดือน</span><b>${fmt(G)}</b></div></div></div>
+      <div class="dc wide"><h3>🎯 Top 10 ช่องว่างโอกาสสูงสุด <span class="mut">(แตะเพื่อเปิด)</span></h3>${L.sort((a,b)=>b.b.gap-a.b.gap).slice(0,10).map((x,i)=>`<div class="hbar toprow" data-id="${esc(x.c.id)}" style="cursor:pointer"><span class="dsrk">${i+1}</span><span class="l" style="width:40%">${esc(title(x.c))}</span><span class="p"><i style="width:${Math.min(100,x.b.share)}%;background:var(--ok)"></i></span><span class="n" style="width:auto;min-width:54px">${fmt(x.b.gap)}</span></div>`).join('')}</div>`})();
+  el.innerHTML=`<div class="dsg">
+    <div class="dc wide dshero"><div class="dshd"><div><small>ภาพรวมพอร์ตลูกค้า</small><div style="font-size:12px;opacity:.8">⏱️ อัปเดตอัตโนมัติ · ล่าสุด ${S.dashTs}</div></div><button class="dsref" id="dsRef">🔄 รีเฟรช</button></div>
+      <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;justify-content:center">${dsDonut([{v:ck,c:'#7dffb0'},{v:tot-ck,c:'transparent'}],pc(ck)+'%','Check-in แล้ว',150,'rgba(255,255,255,.22)','#fff')}
+      <div class="dsh3"><div><b>${fmt(tot)}</b><span>ลูกค้าในรายการ</span></div><div><b>${fmt(ck)}</b><span>Check-in แล้ว</span></div><div><b>${fmt(tot-ck)}</b><span>ยังไม่ได้เยี่ยม</span></div></div></div></div>
+    <div class="dstiles wide">${tile('g','📍',fmt(today),'Check-in วันนี้',null)}${tile(dueN?'a hot':'b','⏰',fmt(dueN),'ถึงกำหนดติดตาม',null)}${tile('b','📞',pc(ph)+'%','มีเบอร์โทร',pc(ph))}${tile('p','🗺️',pc(pn)+'%','มีพิกัดร้าน',pc(pn))}</div>
+    ${bpHtml}
+    <div class="box dc wide" id="trvBox"><h3>🚗 การเดินทางรวม</h3><span class="mut">กำลังคำนวณ…</span></div>
+    ${dsGroup('ผลการติดตามล่าสุด','📋',VR_GROUPS,A.map(c=>c.u?.lastRes).filter(Boolean),['#1e8e4e','#C0272D'])}
+    ${dsGroup('สถานะลูกค้าปัจจุบัน','🏷️',ST_GROUPS,A.map(c=>c.u?.cust_status).filter(Boolean),['#0168B5','#6c4bd1','#d98200'],true)}
+    ${dsGroup('เหตุผลที่ไม่ซื้อ','🛒',NB_GROUPS,A.map(c=>c.u?.not_buy_reason).filter(Boolean),['#d98200','#0168B5','#6c4bd1','#8a93a6'])}
+    ${sfTbl}</div>`;
   fillTravelBox();
   $('#dsRef').onclick=async()=>{S.travel=null;if(S.user.sf==='ALL')await syncRecent();renderDash()};
 }
