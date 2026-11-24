@@ -171,7 +171,12 @@ const CONFIG = {
 };
 const DEMO = !CONFIG.API_URL;
 const VISIT_RESULTS = ['พบเจ้าของ/ผู้ตัดสินใจ','พบพนักงาน/ผู้ช่วย','ร้านปิด (ไม่พบคน)','ไม่พบร้านตามที่อยู่','โทร/LINE ไม่ติด'];
-const CUST_STATUS = ['เปิดกิจการ - ซื้อประจำ','เปิดกิจการ - ซื้อบ้างครั้งคราว','เปิดกิจการ - ซื้อกินใช้เท่านั้น','เปิดกิจการ - ยังไม่ซื้อ/หยุดซื้อ','ปิดชั่วคราว','เลิกกิจการ','ย้ายที่ตั้ง','ติดต่อไม่ได้'];
+const ST_TEMP='ปิดชั่วคราว (กำหนดเปิด ภายใน 1-3 เดือน)';
+const CUST_STATUS = ['เปิดกิจการ - ซื้อประจำ','เปิดกิจการ - ซื้อบ้างครั้งคราว','เปิดกิจการ - ยังไม่ซื้อ/หยุดซื้อ','เป็นผู้ประกอบการ - ซื้อกินซื้อใช้','เป็นบุคคลทั่วไป',ST_TEMP,'ย้ายที่ตั้ง','ติดต่อไม่ได้','เลิกกิจการ'];
+const ST_GROUPS=[['🟢 กลุ่มลูกค้าที่เปิดกิจการ',CUST_STATUS.slice(0,3)],['🏷️ กลุ่มประเภทผู้ซื้อ',CUST_STATUS.slice(3,5)],['⚠️ กลุ่มที่ไม่ได้ดำเนินการตามปกติ',CUST_STATUS.slice(5)]];
+// ชื่อสถานะเดิมที่เคยบันทึกไว้ → แปลงเป็นชื่อใหม่ตอนอ่านข้อมูล (ข้อมูลเก่าใน Sheet ไม่ต้องแก้)
+const ST_OLD={'เปิดกิจการ - ซื้อกินใช้เท่านั้น':'เป็นผู้ประกอบการ - ซื้อกินซื้อใช้','ปิดชั่วคราว':ST_TEMP};
+const normSt=v=>ST_OLD[v]||v;
 const NOT_BUY = ['ราคาสูงกว่าที่อื่น','ใช้ซัพพลายเออร์ประจำ','สินค้าไม่ครบ','ไม่สะดวกเดินทาง/ไม่มีรถ','ต้องการเครดิต','ปริมาณซื้อน้อย','ยังไม่รู้จัก/ไม่เคยใช้บริการ','อื่นๆ'];
 const CHANNELS = [['CHECKIN','ลงพื้นที่ (Check-in GPS)'],['CALL','โทรศัพท์'],['LINE','LINE']];
 const MONTHS = ['พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.*'];
@@ -285,7 +290,7 @@ const S={user:null,pin:'',role:'',all:[],byId:{},view:[],page:1,pos:null,filt:{q
 /* ============ DATA MERGE ============ */
 function mk(cols,row,u){const c={};cols.forEach((k,i)=>c[k]=row[i]);
   ['s1','s2','s3','s4','s5','s6','s7','ytd'].forEach(k=>c[k]=Number(c[k]||0));
-  c.u=u||null;c.s3m=c.s5+c.s6+c.s7;return c}
+  c.u=u||null;if(c.u&&c.u.cust_status)c.u.cust_status=normSt(c.u.cust_status);c.s3m=c.s5+c.s6+c.s7;return c}
 const fixPhone=v=>{v=String(v||'').trim();if(!v)return '';const d=v.replace(/[\s\-]/g,'');return /^[1-9]\d{8}$/.test(d)?'0'+d:v};
 const V=(c,k)=>{const u=c.u;const v=(u&&u[k]!==undefined&&u[k]!=='')?u[k]:(c[k]??'');return k==='phone'?fixPhone(v):v};
 const numC=x=>{const n=parseFloat(String(x??'').replace(/,/g,''));return isNaN(n)?null:n};
@@ -321,7 +326,7 @@ async function loadData(force){
   S.queue.forEach(q=>applyLocal(q.rec));
   hideLoading(); buildFilters(); applyFilters(); renderDash(); renderExport();
 }
-function applyLocal(rec){const c=S.byId[rec.id];if(!c)return;const u=c.u||{visits:0,lastVisit:'',lastRes:''};const n={...u,...rec};
+function applyLocal(rec){const c=S.byId[rec.id];if(!c)return;const u=c.u||{visits:0,lastVisit:'',lastRes:''};const n={...u,...rec};if(n.cust_status)n.cust_status=normSt(n.cust_status);
   n.visits=(u.visits||0)+(rec.type!=='EDIT'?1:0);n.lastVisit=rec.type!=='EDIT'?rec.ts:u.lastVisit;n.lastRes=rec.type!=='EDIT'?rec.visit_result:u.lastRes;c.u=n}
 
 /* ============ LOADING ============ */
@@ -403,7 +408,9 @@ function csLabel(){const n=S.filt.cs?S.filt.cs.size:0;$('#fcsTxt').textContent=n
 function csRender(){
   const cnt={};S.all.forEach(c=>{const k=(c.u&&c.u.cust_status)||'__none';cnt[k]=(cnt[k]||0)+1});
   const opts=[...CUST_STATUS,'__none'],cs=S.filt.cs||(S.filt.cs=new Set());
-  $('#fcsPanel').innerHTML=opts.map(o=>`<label style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid #eee"><input type="checkbox" data-cs="${esc(o)}" ${cs.has(o)?'checked':''} style="width:20px;height:20px"><span style="flex:1">${o==='__none'?'ยังไม่ได้ระบุสถานะ':esc(o)}</span><b class="mut">${fmt(cnt[o]||0)}</b></label>`).join('')+`<div class="acts" style="margin-top:8px"><button type="button" class="btn grey" id="fcsClr">ล้างที่เลือก</button><button type="button" class="btn red" id="fcsOk">ตกลง</button></div>`;
+  const row=o=>`<label style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid #eee"><input type="checkbox" data-cs="${esc(o)}" ${cs.has(o)?'checked':''} style="width:20px;height:20px"><span style="flex:1">${o==='__none'?'ยังไม่ได้ระบุสถานะ':esc(o)}</span><b class="mut">${fmt(cnt[o]||0)}</b></label>`;
+  const hd=t=>`<div style="font-weight:700;color:var(--blue,#0168B5);padding:10px 0 2px;font-size:13px">${t}</div>`;
+  $('#fcsPanel').innerHTML=ST_GROUPS.map(([t,l])=>hd(t)+l.map(row).join('')).join('')+hd('➖ ยังไม่ได้ระบุ')+row('__none')+`<div class="acts" style="margin-top:8px"><button type="button" class="btn grey" id="fcsClr">ล้างที่เลือก</button><button type="button" class="btn red" id="fcsOk">ตกลง</button></div>`;
   $('#fcsPanel').querySelectorAll('[data-cs]').forEach(x=>x.onchange=()=>{x.checked?cs.add(x.dataset.cs):cs.delete(x.dataset.cs);csLabel();applyFilters()});
   $('#fcsClr').onclick=()=>{cs.clear();csRender();csLabel();applyFilters()};$('#fcsOk').onclick=()=>$('#fcsPanel').classList.add('hide');
 }
@@ -475,6 +482,7 @@ function openDetail(id){
   api('history',{id}).then(j=>{const h=$('#hist',bg);if(!h)return;h.innerHTML=j.rows.length?j.rows.map(r=>`<div class="hist"><b>${fmtTs(r.ts)}</b> · ${r.type==='EDIT'?'✏️ แก้ไขข้อมูล':(r.type==='CALL'?'📞 โทร':r.type==='LINE'?'💬 LINE':'📍 Check-in')} · ${esc(r.user).replace('Salesforce','SF')}<br>${esc([r.visit_result,r.cust_status,r.note].filter(Boolean).join(' · '))}${r.photo?` · <a href="${esc(r.photo)}" target="_blank" rel="noopener">รูป</a>`:''}</div>`).join(''):'ยังไม่มีประวัติ'}).catch(()=>{const h=$('#hist',bg);if(h)h.textContent='โหลดประวัติไม่ได้ (ออฟไลน์)'});
 }
 
+function optG(gr,sel){return '<option value="">— เลือก —</option>'+gr.map(([t,l])=>`<optgroup label="${esc(t)}">`+l.map(x=>`<option${x===sel?' selected':''}>${esc(x)}</option>`).join('')+'</optgroup>').join('')}
 function opt(arr,sel,blank='— เลือก —'){return `<option value="">${blank}</option>`+arr.map(x=>`<option${x===sel?' selected':''}>${esc(x)}</option>`).join('')}
 function openForm(c,mode){
   const u=c.u||{},pin=shopPin(c),isCi=mode==='CHECKIN';
@@ -495,7 +503,7 @@ function openForm(c,mode){
       ${isCi?`<div class="field"><label>ช่องทางติดตาม</label><select id="f_channel">${CHANNELS.map(([v,l])=>`<option value="${v}">${l}</option>`).join('')}</select></div>
       <div class="gps" id="gpsBox">กำลังหาตำแหน่ง GPS…</div>
       <div class="field"><label>ผลการติดตาม *</label><select id="f_visit_result">${opt(VISIT_RESULTS,'')}</select></div>`:''}
-      <div class="field"><label>สถานะลูกค้าปัจจุบัน</label><select id="f_cust_status">${opt(CUST_STATUS,V(c,'cust_status'))}</select></div>
+      <div class="field"><label>สถานะลูกค้าปัจจุบัน</label><select id="f_cust_status">${optG(ST_GROUPS,V(c,'cust_status'))}</select></div>
       <div class="field" id="nbWrap"><label>เหตุผลที่ไม่ซื้อ / ซื้อน้อย</label><select id="f_not_buy_reason">${opt(NOT_BUY,V(c,'not_buy_reason'))}</select></div>
       <div class="field"><label>ซื้อจากที่ไหนอยู่ (คู่แข่ง/ซัพพลายเออร์)</label><input id="f_competitor" value="${esc(V(c,'competitor'))}"></div>
       <div class="field"><label>ความสนใจ</label><div class="chk"><label><input type="checkbox" class="int" value="เครดิต" ${interest.includes('เครดิต')?'checked':''}>เครดิต</label><label><input type="checkbox" class="int" value="จัดส่ง" ${interest.includes('จัดส่ง')?'checked':''}>จัดส่งสินค้า</label><label><input type="checkbox" class="int" value="สินค้าพิเศษ" ${interest.includes('สินค้าพิเศษ')?'checked':''}>สินค้าโปร/พิเศษ</label></div></div>
@@ -515,7 +523,7 @@ function openForm(c,mode){
     <div class="ft"><button class="btn grey" id="fCancel" style="flex:1">ยกเลิก</button><button class="btn red" id="fSave" style="flex:2">${isCi?'บันทึก Check-in':'บันทึกข้อมูล'}</button></div>`);
   const $$=s=>$(s,bg);
   const pinTxt=()=>{const p=newPin||pin;$$('#pinTxt').textContent=(p&&p.lat!=='')?`${(+p.lat).toFixed(6)}, ${(+p.lng).toFixed(6)}${newPin?(newPin.manual?' (ปรับเอง)':(newPin.acc?` (GPS ±${Math.round(newPin.acc)} ม.)`:' (ใหม่)')):''}`:'ยังไม่ปักหมุด'};pinTxt();
-  const nb=()=>{const s=$$('#f_cust_status').value;$$('#nbWrap').classList.toggle('hide',!/ยังไม่ซื้อ|ซื้อบ้าง|ซื้อกินใช้|ปิด|เลิก|ย้าย/.test(s))};nb();$$('#f_cust_status').onchange=nb;
+  const nb=()=>{const s=$$('#f_cust_status').value;$$('#nbWrap').classList.toggle('hide',!/ยังไม่ซื้อ|ซื้อบ้าง|ซื้อกินซื้อใช้|ปิด|เลิก|ย้าย/.test(s))};nb();$$('#f_cust_status').onchange=nb;
   let stopPin=null;
   $$('#pinHere').onclick=()=>{stopPin&&stopPin();const t=$$('#pinTxt'),b=$$('#pinHere');b.disabled=true;
     stopPin=watchBest(p=>{t.textContent=`⏳ GPS ±${Math.round(p.acc)} ม. กำลังปรับให้แม่นขึ้น…`},
@@ -606,7 +614,7 @@ function renderDash(){
       return `<div class="box"><h3>💰 Buying Potential (${fmt(L.length)} ราย)</h3><div class="kv"><span>Potential รวม/เดือน</span><span><b>${fmt(T)}</b> บ.</span><span>ซื้อกับ GW เฉลี่ย</span><span>${fmt(W)} บ.</span><span>Share of Wallet รวม</span><span><b>${Math.round(W*100/T)}%</b></span><span>ช่องว่างโอกาส</span><span><b>${fmt(G)}</b> บ./เดือน</span></div>
       <h3 style="margin-top:12px">Top 10 ช่องว่างโอกาสสูงสุด (แตะเพื่อเปิด)</h3>${L.sort((a,b)=>b.b.gap-a.b.gap).slice(0,10).map(x=>`<div class="hbar toprow" data-id="${esc(x.c.id)}" style="cursor:pointer"><span class="l">${esc(title(x.c))}</span><span class="p"><i style="width:${Math.min(100,x.b.share)}%;background:var(--ok)"></i></span><span class="n" style="width:auto">${fmt(x.b.gap)}</span></div>`).join('')}</div>`})()}
     ${sfTbl}<div class="box"><h3>ผลการติดตามล่าสุด</h3>${bars(cnt(A.map(c=>c.u?.lastRes)))}</div>
-    <div class="box"><h3>สถานะลูกค้าปัจจุบัน</h3>${bars(cnt(A.map(c=>c.u?.cust_status)))}</div>
+    <div class="box"><h3>สถานะลูกค้าปัจจุบัน</h3>${(()=>{const m=Object.fromEntries(cnt(A.map(c=>c.u?.cust_status)));const mx=Math.max(1,...Object.values(m));return ST_GROUPS.map(([t,l])=>`<div style="font-weight:700;color:var(--blue,#0168B5);padding:8px 0 2px;font-size:13px">${t}</div>`+l.map(k=>`<div class="hbar"><span class="l">${esc(k)}</span><span class="p"><i style="width:${(m[k]||0)/mx*100}%"></i></span><span class="n">${fmt(m[k]||0)}</span></div>`).join('')).join('')})()}</div>
     <div class="box"><h3>เหตุผลที่ไม่ซื้อ</h3>${bars(cnt(A.map(c=>c.u?.not_buy_reason)))}</div>`;
   fillTravelBox();
   $('#dsRef').onclick=async()=>{S.travel=null;if(S.user.sf==='ALL')await syncRecent();renderDash()};
