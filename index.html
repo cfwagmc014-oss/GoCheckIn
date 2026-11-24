@@ -259,7 +259,7 @@ async function demoApi(action,p){
   if(action==='lookup'){ if(!demoMaster)demoMaster=await (await fetch(CONFIG.DEMO_DATA)).json();
     const q=String(p.q||'').toLowerCase(),c=demoMaster.cols,ix=k=>c.indexOf(k),qd=q.replace(/\D/g,''),ph={};
     if(qd.length>=3)lsGet('gw_demo_rec',[]).forEach(r=>{if(r.phone)ph[r.id]=String(r.phone)});
-    return{rows:demoMaster.rows.filter(r=>(r[ix('id')]+' '+r[ix('name')]+' '+r[ix('biz')]).toLowerCase().includes(q)||(qd.length>=3&&(String(r[ix('id')]).includes(qd)||(ph[r[ix('id')]]||'').replace(/\D/g,'').includes(qd)))).slice(0,40).map(r=>{const o={};c.forEach((k,i)=>o[k]=r[i]);return o})} }
+    return{rows:demoMaster.rows.filter(r=>(r[ix('id')]+' '+r[ix('name')]+' '+r[ix('biz')]).toLowerCase().includes(q)||(qd.length>=3&&(String(r[ix('id')]).includes(qd)||(ph[r[ix('id')]]||'').replace(/\D/g,'').replace(/^(66|0)+/,'').includes(qd.replace(/^(66|0)+/,''))))).slice(0,40).map(r=>{const o={};c.forEach((k,i)=>o[k]=r[i]);return o})} }
   if(action==='history'){ return{rows:lsGet('gw_demo_rec',[]).filter(r=>r.id===p.id).reverse().slice(0,30)} }
   if(action==='log'){ const a=lsGet('gw_demo_rec',[]);return{cols:REC_COLS,rows:a.map(r=>REC_COLS.map(c=>r[c]??''))} }
   if(action==='closeRequest'){const C=lsGet('gw_demo_closes',{}),id=p.sf+'|'+p.date;if(C[id]&&(C[id].status==='CLOSED'||C[id].status==='APPROVED'))throw new Error('วันนี้ปิดงานไปแล้ว');if(C[id]&&C[id].status==='REQUEST')throw new Error('ส่งคำขอไปแล้ว รอผู้จัดการอนุมัติ');if(!p.reason)throw new Error('ต้องกรอกเหตุผล');C[id]={close_id:id,sf:p.sf,date:p.date,status:'REQUEST',ts:nowIso(),mode:'ADMIN',photo:'',note:'ปิดงานกรณีพิเศษ: '+p.reason};lsSet('gw_demo_closes',C);return{}}
@@ -727,7 +727,7 @@ $('#findQ').oninput=e=>{clearTimeout(fT);const q=e.target.value.trim();const out
       out.innerHTML=j.rows.map(r=>{const mine=S.user.sf!=='ALL'&&r.sf===S.user.sf;
         return `<div class="card${r.sf?'':' vac'}" style="cursor:default"><div class="main"><div class="t">${esc(r.biz||r.name)}</div><div class="s">${esc(r.id)} · ${esc(r.name)} · ${esc(r.seg||r.grp)}</div><div class="s">${esc([r.subd,r.dist].filter(Boolean).join(' / '))||'—'}</div>
           <div class="tags">${r.pdel?'<span class="tag warn">รอ Delete</span>':''}${r.inact?'<span class="tag warn">Inactive</span>':''}${r.last?`<span class="tag">ซื้อล่าสุด ${esc(r.last)}</span>`:''}</div></div>
-          <div class="side"><span class="tag ${r.sf?(mine?'ok':'blue'):'warn'}" style="font-size:14px;padding:5px 12px">${r.sf?(mine?'พอร์ตของคุณ':'พอร์ต '+sfShort(r.sf)):'ยังไม่มีผู้ดูแล'}</span></div></div>`}).join('')||'<div class="box mut" style="text-align:center">ไม่พบลูกค้า</div>'
+          <div class="side"><span class="tag ${r.sf?(mine?'ok':'blue'):'warn'}" style="font-size:14px;padding:5px 12px">${r.sf?(mine?'พอร์ตของคุณ':'พอร์ต '+sfShort(r.sf)):'ยังไม่มีผู้ดูแล'}</span></div></div>`}).join('')||'<div class="box mut" style="text-align:center">ไม่พบลูกค้า'+(/^[0-9\s-]{9,}$/.test(q)?'<br><small>เบอร์โทรค้นได้เฉพาะลูกค้าที่เคยมีการกรอกเบอร์ไว้ในระบบ</small>':'')+'</div>'
     }catch(err){out.innerHTML=`<div class="box mut">ค้นหาไม่ได้: ${esc(err.message)}</div>`}},350)};
 
 
