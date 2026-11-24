@@ -132,7 +132,7 @@ table.t{width:100%;border-collapse:collapse;font-size:13px}table.t th,table.t td
   <div id="pPlan" class="wrap hide"></div>
   <div id="pFind" class="wrap hide">
     <div class="box"><h3>ตรวจสอบว่าลูกค้าอยู่ในพอร์ตของใคร</h3>
-      <input id="findQ" type="search" placeholder="พิมพ์ชื่อ / ชื่อร้าน / รหัสสมาชิก (อย่างน้อย 3 ตัวอักษร)">
+      <input id="findQ" type="search" placeholder="ชื่อ / ชื่อร้าน / เลขสมาชิก / เบอร์โทร (อย่างน้อย 3 ตัว)">
       <p class="mut" style="margin:6px 0 0">ค้นได้ทั้งสาขา ทุกพอร์ต · แสดงเฉพาะผู้ดูแลและข้อมูลทั่วไป</p></div>
     <div id="findRes"></div>
   </div>
@@ -257,8 +257,9 @@ async function demoApi(action,p){
     return{cols:demoMaster.cols,rows,total:rows.length,upd:demoLatest(want)}; }
   if(action==='save'){ const a=lsGet('gw_demo_rec',[]);const r={...p.rec};if(p.photoData)r.photo='(รูปแนบ—โหมดทดลอง)';a.push(r);lsSet('gw_demo_rec',a);return{photo:r.photo||''} }
   if(action==='lookup'){ if(!demoMaster)demoMaster=await (await fetch(CONFIG.DEMO_DATA)).json();
-    const q=String(p.q||'').toLowerCase(),c=demoMaster.cols,ix=k=>c.indexOf(k);
-    return{rows:demoMaster.rows.filter(r=>(r[ix('id')]+' '+r[ix('name')]+' '+r[ix('biz')]).toLowerCase().includes(q)).slice(0,40).map(r=>{const o={};c.forEach((k,i)=>o[k]=r[i]);return o})} }
+    const q=String(p.q||'').toLowerCase(),c=demoMaster.cols,ix=k=>c.indexOf(k),qd=q.replace(/\D/g,''),ph={};
+    if(qd.length>=3)lsGet('gw_demo_rec',[]).forEach(r=>{if(r.phone)ph[r.id]=String(r.phone)});
+    return{rows:demoMaster.rows.filter(r=>(r[ix('id')]+' '+r[ix('name')]+' '+r[ix('biz')]).toLowerCase().includes(q)||(qd.length>=3&&(String(r[ix('id')]).includes(qd)||(ph[r[ix('id')]]||'').replace(/\D/g,'').includes(qd)))).slice(0,40).map(r=>{const o={};c.forEach((k,i)=>o[k]=r[i]);return o})} }
   if(action==='history'){ return{rows:lsGet('gw_demo_rec',[]).filter(r=>r.id===p.id).reverse().slice(0,30)} }
   if(action==='log'){ const a=lsGet('gw_demo_rec',[]);return{cols:REC_COLS,rows:a.map(r=>REC_COLS.map(c=>r[c]??''))} }
   if(action==='closeRequest'){const C=lsGet('gw_demo_closes',{}),id=p.sf+'|'+p.date;if(C[id]&&(C[id].status==='CLOSED'||C[id].status==='APPROVED'))throw new Error('วันนี้ปิดงานไปแล้ว');if(C[id]&&C[id].status==='REQUEST')throw new Error('ส่งคำขอไปแล้ว รอผู้จัดการอนุมัติ');if(!p.reason)throw new Error('ต้องกรอกเหตุผล');C[id]={close_id:id,sf:p.sf,date:p.date,status:'REQUEST',ts:nowIso(),mode:'ADMIN',photo:'',note:'ปิดงานกรณีพิเศษ: '+p.reason};lsSet('gw_demo_closes',C);return{}}
