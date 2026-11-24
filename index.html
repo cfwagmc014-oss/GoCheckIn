@@ -27,6 +27,10 @@ textarea{min-height:70px;resize:vertical}
 .count{font-size:13px;color:var(--mut);margin:2px 2px 8px;display:flex;justify-content:space-between}
 .card{background:var(--card);border-radius:var(--r);padding:12px;margin-bottom:8px;box-shadow:0 1px 2px rgba(20,30,60,.07);cursor:pointer;display:flex;gap:10px}
 .card:active{background:#f8f9fc}
+.card.closed{position:relative;overflow:hidden;background:#fff5f5;box-shadow:0 0 0 1px #f0b4b4}
+.card.closed .main{opacity:.72}
+.stampc{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%) rotate(-9deg);pointer-events:none;z-index:2;padding:2px 14px;border:3px double #C0272D;border-radius:6px;color:#C0272D;font-weight:900;font-size:26px;letter-spacing:2px;line-height:1.25;text-align:center;opacity:.78;white-space:nowrap;background:rgba(255,255,255,.28);text-shadow:0 0 1px rgba(192,39,45,.4)}
+.stampc small{display:block;font-size:11px;letter-spacing:4px;font-weight:800}
 .card .main{flex:1;min-width:0}
 .card .t{font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .card .s{font-size:13px;color:var(--mut);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -406,7 +410,7 @@ function renderList(){
     if(!V(c,'phone'))tg.push('<span class="tag warn">ไม่มีเบอร์</span>');
     if(shopPin(c))tg.push('<span class="tag ok">📍</span>');
     if(S.filt.sort==='near'&&c._d<1e11)tg.push(`<span class="tag blue">${fmtDist(c._d)}</span>`);
-    return `<div class="card${c.port==='OUT'?' out':c.port==='VACANT'?' vac':''}" data-id="${esc(c.id)}"><div class="main"><div class="t">${esc(title(c))}</div><div class="s">${esc(c.id)} · ${esc(c.seg||c.grp)}${S.user.sf==='ALL'&&c.sf?' · '+sfShort(c.sf):''}</div><div class="s">${esc([V(c,'subd'),V(c,'dist')].filter(Boolean).join(' / '))||'—'}</div><div class="tags">${tg.join('')}</div></div><div class="side"><b>${fmt(c.s7)}</b>เดือนนี้ (1-22 พ.ย.)<div style="margin-top:3px">3 ด.: ${fmt(c.s3m)}</div><div>ซื้อล่าสุด: <span style="color:${c.last>='2026-09'?'var(--ok)':'var(--red)'};font-weight:600">${lastLabel(c)}</span></div></div></div>`}).join('')||'<div class="box mut" style="text-align:center">ไม่พบรายการ</div>';
+    const cl=c.u&&c.u.cust_status==='เลิกกิจการ';return `<div class="card${c.port==='OUT'?' out':c.port==='VACANT'?' vac':''}${cl?' closed':''}" data-id="${esc(c.id)}">${cl?'<div class="stampc">เลิกกิจการ<small>CLOSED</small></div>':''}<div class="main"><div class="t">${esc(title(c))}</div><div class="s">${esc(c.id)} · ${esc(c.seg||c.grp)}${S.user.sf==='ALL'&&c.sf?' · '+sfShort(c.sf):''}</div><div class="s">${esc([V(c,'subd'),V(c,'dist')].filter(Boolean).join(' / '))||'—'}</div><div class="tags">${tg.join('')}</div></div><div class="side"><b>${fmt(c.s7)}</b>เดือนนี้ (1-22 พ.ย.)<div style="margin-top:3px">3 ด.: ${fmt(c.s3m)}</div><div>ซื้อล่าสุด: <span style="color:${c.last>='2026-09'?'var(--ok)':'var(--red)'};font-weight:600">${lastLabel(c)}</span></div></div></div>`}).join('')||'<div class="box mut" style="text-align:center">ไม่พบรายการ</div>';
   $('#moreBtn').classList.toggle('hide',n>=S.view.length);
 }
 $('#moreBtn').onclick=()=>{S.page++;renderList()};
