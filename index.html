@@ -723,7 +723,15 @@ let fT,fSeq=0;
 $('#findQ').oninput=e=>{clearTimeout(fT);const q=e.target.value.trim();const out=$('#findRes');
   if(q.length<3){out.innerHTML='';return}
   fT=setTimeout(async()=>{const my=++fSeq;out.innerHTML='<div class="mut" style="text-align:center">กำลังค้นหา…</div>';
-    try{const j=await api('lookup',{q});if(my!==fSeq)return;
+    try{let j={rows:[]};let apiErr=null;try{j=await api('lookup',{q})}catch(e){apiErr=e}
+      if(my!==fSeq)return;
+      // เสริมจากรายชื่อที่โหลดในเครื่อง (ค้นด้วยเบอร์/รหัส/ชื่อ ได้แม้ backend ยังเป็นเวอร์ชันเก่า)
+      const qd=q.replace(/\D/g,''),qp=qd.replace(/^(66|0)+/,''),have=new Set(j.rows.map(r=>String(r.id)));
+      (S.all||[]).forEach(c=>{if(have.has(String(c.id))||j.rows.length>=40)return;
+        const ph=String(V(c,'phone')||'').replace(/\D/g,'').replace(/^(66|0)+/,'');
+        const hit=(c.id+' '+c.name+' '+(V(c,'biz')||'')).toLowerCase().includes(q.toLowerCase())||(qd.length>=3&&(String(c.id).includes(qd)||(qp.length>=3&&ph.includes(qp))));
+        if(hit)j.rows.push({id:c.id,name:c.name,biz:V(c,'biz'),grp:c.grp,seg:c.seg,subd:V(c,'subd'),dist:V(c,'dist'),sf:c.sf,pdel:c.pdel,inact:c.inact,last:c.last})});
+      if(apiErr&&!j.rows.length)throw apiErr;
       out.innerHTML=j.rows.map(r=>{const mine=S.user.sf!=='ALL'&&r.sf===S.user.sf;
         return `<div class="card${r.sf?'':' vac'}" style="cursor:default"><div class="main"><div class="t">${esc(r.biz||r.name)}</div><div class="s">${esc(r.id)} · ${esc(r.name)} · ${esc(r.seg||r.grp)}</div><div class="s">${esc([r.subd,r.dist].filter(Boolean).join(' / '))||'—'}</div>
           <div class="tags">${r.pdel?'<span class="tag warn">รอ Delete</span>':''}${r.inact?'<span class="tag warn">Inactive</span>':''}${r.last?`<span class="tag">ซื้อล่าสุด ${esc(r.last)}</span>`:''}</div></div>
