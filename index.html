@@ -271,7 +271,7 @@ async function demoApi(action,p){
   if(action==='planClear'){const P=lsGet('gw_demo_plans',{});let n=0;Object.keys(P).forEach(k=>{if(k===p.plan_id||(p.date&&P[k].date===p.date)){delete P[k];n++}});lsSet('gw_demo_plans',P);return{deleted:n}}
   if(action==='recent'){const now=nowIso();if(!p.since)return{now,rows:[]};return{now,rows:lsGet('gw_demo_rec',[]).filter(r=>String(r.ts)>p.since)}}
   if(action==='planSave'){const P=lsGet('gw_demo_plans',{}),x=p.plan,id=x.sf+'|'+x.date,cur=P[id];P[id]={plan_id:id,sf:x.sf,date:x.date,status:x.status==='DRAFT'?'DRAFT':'SUBMITTED',ids:x.ids.join(','),n:x.ids.length,area:x.area||'',submitted_ts:nowIso(),submitted_by:x.sf,decided_ts:'',decided_by:'',note:''};lsSet('gw_demo_plans',P);return{}}
-  if(action==='planDecide'){if(S.pin!=='gw2026')throw new Error('เฉพาะผู้จัดการเท่านั้น');const P=lsGet('gw_demo_plans',{}),c=P[p.plan_id];if(!c||c.status!=='SUBMITTED')throw new Error('แผนนี้ไม่ได้อยู่ในสถานะรออนุมัติ');c.status=p.decision;c.decided_ts=nowIso();c.decided_by='ผู้จัดการ';c.note=p.note||'';lsSet('gw_demo_plans',P);return{}}
+  if(action==='planDecide'){if(S.pin!=='gw2026')throw new Error('เฉพาะผู้จัดการเท่านั้น');const P=lsGet('gw_demo_plans',{}),c=P[p.plan_id];if(!c||c.status!=='SUBMITTED')throw new Error('แผนนี้ไม่ได้อยู่ในสถานะรออนุมัติ');c.status=p.decision;c.decided_ts=nowIso();c.decided_by=p.by||'ผู้จัดการ';c.note=p.note||'';lsSet('gw_demo_plans',P);return{}}
   if(action==='planList'){const from=p.from||todayStr(),to=p.to||from,rec=lsGet('gw_demo_rec',[]).filter(r=>r.type!=='EDIT'),day={},ci={};
     rec.forEach(r=>{const d=String(r.ts).slice(0,10);if(d<from||d>to)return;(day[d]=day[d]||{})[r.id]=1;const k=d+'|'+r.user;(ci[k]=ci[k]||{})[r.id]=1});
     const plans=Object.values(lsGet('gw_demo_plans',{})).filter(o=>o.date>=from&&o.date<=to&&(!p.sf||p.sf==='ALL'||o.sf===p.sf)).map(o=>{const ids=o.ids?o.ids.split(','):[],mine=ci[o.date+'|'+o.sf]||{};return{...o,ids,done:ids.filter(i=>(day[o.date]||{})[i]),extra:Object.keys(mine).filter(i=>!ids.includes(i)).length}});
@@ -329,25 +329,28 @@ function hideLoading(){$('#loading')?.remove()}
 
 /* ============ LOGIN ============ */
 function initLogin(){
-  const sel=$('#lgSf');sel.innerHTML=CONFIG.SF_LIST.map(n=>`<option value="Salesforce${n}">SF${n}</option>`).join('')+'<option value="ADMIN">ผู้จัดการ / Admin (ทุกพอร์ต)</option>';
+  const sel=$('#lgSf');sel.innerHTML=CONFIG.SF_LIST.map(n=>`<option value="Salesforce${n}">SF${n}</option>`).join('')+ADMIN_POS.map(t=>`<option value="ADMIN:${t}">${t} (ทุกพอร์ต)</option>`).join('');
   const saved=lsGet('gw_user',null); if(saved){sel.value=saved.sf}
   $('#lgGo').onclick=doLogin; $('#lgPin').onkeydown=e=>{if(e.key==='Enter')doLogin()};
   if(saved&&saved.pin){S.pin=saved.pin;login(saved.sf,true)}else show('vLogin');
 }
+const ADMIN_POS=['SGM','ASGM-SC','SM-SC'];
+const isAdminSel=sf=>sf==='ADMIN'||String(sf).startsWith('ADMIN:');
+const adminName=sf=>String(sf).split(':')[1]||'ผู้จัดการ';
 async function doLogin(){S.pin=$('#lgPin').value.trim();if(!S.pin)return;login($('#lgSf').value,false)}
 async function login(sf,silent){
   $('#lgMsg').textContent='';
   try{
     const r=await api('login');S.role=r.role;
-    if(sf==='ADMIN'&&S.role!=='admin')throw new Error('รหัสนี้ไม่ใช่รหัสผู้จัดการ');
-    S.user={sf:sf==='ADMIN'?'ALL':sf,name:sf==='ADMIN'?'Admin':sfShort(sf)};
-    if(S.role==='admin'&&sf!=='ADMIN')S.role='team'; // เลือกเป็น SF = เห็นเฉพาะพอร์ตนั้น
+    if(isAdminSel(sf)&&S.role!=='admin')throw new Error('รหัสนี้ไม่ใช่รหัสผู้จัดการ');
+    S.user={sf:isAdminSel(sf)?'ALL':sf,name:isAdminSel(sf)?adminName(sf):sfShort(sf)};
+    if(S.role==='admin'&&!isAdminSel(sf))S.role='team'; // เลือกเป็น SF = เห็นเฉพาะพอร์ตนั้น
     lsSet('gw_user',{sf,pin:S.pin});
     show('vMain'); $('#hdUser').textContent=S.user.name+' ⎋'; $('#hdTitle').textContent=DEMO?'ST14 - Customer Checklist (ทดลอง)':'ST14 - Customer Checklist';
     $('#navMg').classList.toggle('hide',S.user.sf!=='ALL'); await loadData(); flushQueue(); if(S.user.sf==='ALL')syncRecent(); if(S.user.sf!=='ALL')document.querySelector('nav.bottom button[data-tab=Plan]').click();
   }catch(e){
     if(silent&&String(e.message).match(/fetch|network|Failed/i)){ // ออฟไลน์ + เคยล็อกอิน
-      S.role='team';S.user={sf,name:sfShort(sf)};show('vMain');$('#hdUser').textContent=S.user.name+' ⎋';await loadData();return}
+      if(isAdminSel(sf)){S.role='admin';S.user={sf:'ALL',name:adminName(sf)}}else{S.role='team';S.user={sf,name:sfShort(sf)}}show('vMain');$('#hdUser').textContent=S.user.name+' ⎋';await loadData();return}
     show('vLogin');$('#lgMsg').textContent=e.message;
   }
 }
@@ -999,13 +1002,13 @@ async function fillAdminApprInner(box,d,op,silent){
       p.ids.forEach((id,i)=>{const c=S.byId[id];L.push([p.date,sfShort(p.sf),i+1,id,c?title(c):'',c?[V(c,'subd'),V(c,'dist')].filter(Boolean).join(' / '):'',...ll(c),p.done.includes(id)?'Y':'',(()=>{const g=trvOf(T2,p.sf,p.date),st=g&&g.stops.find(x=>x.id===id);return st?hhmm(st.ts):''})(),(()=>{const g=trvOf(T2,p.sf,p.date),st=g&&g.stops.find(x=>x.id===id);return st?+km1(st.leg):''})()])})});
     const wb=XLSX.utils.book_new(),w1=XLSX.utils.aoa_to_sheet(A),w2=XLSX.utils.aoa_to_sheet(M),w3=XLSX.utils.aoa_to_sheet(L);w1['!cols']=[{wch:12},{wch:9},{wch:13},{wch:10},{wch:12},{wch:10},{wch:9},{wch:14},{wch:16},{wch:30},{wch:19},{wch:19},{wch:30}];w2['!cols']=[{wch:12},{wch:9},{wch:14},{wch:36},{wch:26},{wch:12},{wch:12}];w3['!cols']=[{wch:12},{wch:9},{wch:10},{wch:14},{wch:36},{wch:26},{wch:12},{wch:12},{wch:9},{wch:12},{wch:18}];
     XLSX.utils.book_append_sheet(wb,w1,'ติดตามแผน');XLSX.utils.book_append_sheet(wb,w3,'รายร้านตามแผน');XLSX.utils.book_append_sheet(wb,w2,'ร้านที่ไม่ได้เยี่ยมตามแผน');XLSX.writeFile(wb,`GW_PlanTracking_${stamp()}.xlsx`)}catch(e){hideLoading();toast(e.message,4000)}};
-  box.onclick=async e=>{const ca=e.target.closest('[data-ca]');if(ca){try{showLoading('กำลังบันทึก…');await api('closeDecide',{close_id:ca.dataset.ca});hideLoading();S.travel=null;toast('อนุมัติปิดงานแล้ว');fillAdminAppr()}catch(err){hideLoading();toast(err.message,4000)}return}
-    const ro=e.target.closest('[data-ro]');if(ro){const note=prompt('ส่งกลับให้แก้/เปิดงานใหม่ — ระบุเหตุผล (เซลส์จะเห็น)');if(note===null)return;try{showLoading('กำลังบันทึก…');await api('closeReopen',{close_id:ro.dataset.ro,note});hideLoading();S.travel=null;toast('ส่งกลับแล้ว');fillAdminAppr()}catch(err){hideLoading();toast(err.message,4000)}return}
+  box.onclick=async e=>{const ca=e.target.closest('[data-ca]');if(ca){try{showLoading('กำลังบันทึก…');await api('closeDecide',{close_id:ca.dataset.ca,by:S.user.name});hideLoading();S.travel=null;toast('อนุมัติปิดงานแล้ว');fillAdminAppr()}catch(err){hideLoading();toast(err.message,4000)}return}
+    const ro=e.target.closest('[data-ro]');if(ro){const note=prompt('ส่งกลับให้แก้/เปิดงานใหม่ — ระบุเหตุผล (เซลส์จะเห็น)');if(note===null)return;try{showLoading('กำลังบันทึก…');await api('closeReopen',{close_id:ro.dataset.ro,note,by:S.user.name});hideLoading();S.travel=null;toast('ส่งกลับแล้ว');fillAdminAppr()}catch(err){hideLoading();toast(err.message,4000)}return}
     const b=e.target.closest('[data-ad]');if(!b)return;const id=b.dataset.id,a=b.dataset.ad,p=j.plans.find(x=>x.plan_id===id);
     try{if(a==='gt'){const g=goTaskText(p);try{await navigator.clipboard.writeText(g.title+'\n\n'+g.desc);toast('คัดลอกรายละเอียดงานแล้ว — วางในหน้าสร้างงานของ GO TASK',4500)}catch(_){prompt('คัดลอกข้อความนี้ไปวางใน GO TASK',g.title+'\n\n'+g.desc)}window.open(CONFIG.GOTASK_URL+'#/new','_blank','noopener');return}
       if(a==='clr'){if(!confirm('ล้างแผนนี้ให้เป็น 0? ลบถาวร เซลส์ต้องสร้างและส่งแผนใหม่'))return;showLoading('กำลังล้าง…');await api('planClear',{plan_id:id});hideLoading();toast('ล้างแผนแล้ว');return fillAdminAppr()}
       let note='';if(a==='no'){note=prompt('เหตุผลที่ส่งกลับ (เซลส์จะเห็น)')||'';if(!note)return}
-      showLoading('กำลังบันทึก…');await api('planDecide',{plan_id:id,decision:a==='ok'?'APPROVED':'REJECTED',note});hideLoading();toast(a==='ok'?'อนุมัติแล้ว':'ส่งกลับแล้ว');fillAdminAppr()
+      showLoading('กำลังบันทึก…');await api('planDecide',{plan_id:id,decision:a==='ok'?'APPROVED':'REJECTED',note,by:S.user.name});hideLoading();toast(a==='ok'?'อนุมัติแล้ว':'ส่งกลับแล้ว');fillAdminAppr()
     }catch(err){hideLoading();toast(err.message,4000)}};
 }
 
