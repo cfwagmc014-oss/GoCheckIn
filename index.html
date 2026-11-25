@@ -124,7 +124,7 @@ table.t{width:100%;border-collapse:collapse;font-size:13px}table.t th,table.t td
   <div class="box">
     <div class="field"><label>ผู้ใช้งาน</label><select id="lgSf"></select></div>
     <div class="field"><label>รหัสผ่าน</label><input id="lgPin" type="password" inputmode="text" autocomplete="off"></div>
-    <button class="btn red" id="lgGo">เข้าสู่ระบบ</button>
+    <div class="mut" style="margin:6px 0">📍 ระบบแสดงตำแหน่งปัจจุบัน</div><button class="btn red" id="lgGo">เข้าสู่ระบบ</button>
     <div class="mut" id="lgMsg" style="margin-top:8px"></div>
   </div>
 </div>
@@ -306,6 +306,8 @@ async function demoApi(action,p){
   if(action==='recCleanup'){const R=lsGet('gw_demo_rec',[]),seen={},keep=[];let dup=0,noloc=0;R.forEach(r=>{const k=[r.ts,r.type,r.id,r.user,r.device].join('|');if(seen[k]){dup++;return}seen[k]=1;if(r.type==='CHECKIN'&&!(+r.ci_lat&&+r.ci_lng)){noloc++;return}keep.push(r)});if(!p.dry&&(dup+noloc))lsSet('gw_demo_rec',keep);return{total:R.length,dup,noloc,keep:keep.length,sample:[],backup:p.dry?'':'(เดโม)'}}
   if(action==='planClear'){const P=lsGet('gw_demo_plans',{});let n=0;Object.keys(P).forEach(k=>{if(k===p.plan_id||(p.date&&P[k].date===p.date)){delete P[k];n++}});lsSet('gw_demo_plans',P);return{deleted:n}}
   if(action==='recent'){const now=nowIso();if(!p.since)return{now,rows:[]};return{now,rows:lsGet('gw_demo_rec',[]).filter(r=>String(r.ts)>p.since)}}
+  if(action==='posPing'){const P=lsGet('gw_demo_pos',{});P[p.sf]={sf:p.sf,lat:p.lat,lng:p.lng,acc:p.acc,t:Date.now()};lsSet('gw_demo_pos',P);return{}}
+  if(action==='posList'){const P=lsGet('gw_demo_pos',{});return{rows:Object.values(P).filter(x=>Date.now()-x.t<900000),now:Date.now()}}
   if(action==='planSave'){const P=lsGet('gw_demo_plans',{}),x=p.plan,id=x.sf+'|'+x.date,cur=P[id];P[id]={plan_id:id,sf:x.sf,date:x.date,status:x.status==='DRAFT'?'DRAFT':'SUBMITTED',ids:x.ids.join(','),n:x.ids.length,area:x.area||'',submitted_ts:nowIso(),submitted_by:x.sf,decided_ts:'',decided_by:'',note:''};lsSet('gw_demo_plans',P);return{}}
   if(action==='planDecide'){if(S.pin!=='gw2026')throw new Error('เฉพาะผู้จัดการเท่านั้น');const P=lsGet('gw_demo_plans',{}),c=P[p.plan_id];if(!c||c.status!=='SUBMITTED')throw new Error('แผนนี้ไม่ได้อยู่ในสถานะรออนุมัติ');c.status=p.decision;c.decided_ts=nowIso();c.decided_by=p.by||'ผู้จัดการ';c.note=p.note||'';lsSet('gw_demo_plans',P);return{}}
   if(action==='planList'){const from=p.from||todayStr(),to=p.to||from,rec=lsGet('gw_demo_rec',[]).filter(r=>r.type!=='EDIT'),day={},ci={};
@@ -382,11 +384,11 @@ async function login(sf,silent){
     S.user={sf:isAdminSel(sf)?'ALL':sf,name:isAdminSel(sf)?adminName(sf):sfShort(sf)};
     if(S.role==='admin'&&!isAdminSel(sf))S.role='team'; // เลือกเป็น SF = เห็นเฉพาะพอร์ตนั้น
     lsSet('gw_user',{sf,pin:S.pin});
-    show('vMain'); $('#hdUser').textContent=S.user.name+' ⎋'; $('#hdTitle').textContent=DEMO?'ST14 - Customer Checklist (ทดลอง)':'ST14 - Customer Checklist';
+    show('vMain'); posStart(); $('#hdUser').textContent=S.user.name+' ⎋'; $('#hdTitle').textContent=DEMO?'ST14 - Customer Checklist (ทดลอง)':'ST14 - Customer Checklist';
     $('#navMg').classList.toggle('hide',S.user.sf!=='ALL'); await loadData(); flushQueue(); if(S.user.sf==='ALL')syncRecent(); if(S.user.sf!=='ALL')document.querySelector('nav.bottom button[data-tab=Plan]').click();
   }catch(e){
     if(silent&&String(e.message).match(/fetch|network|Failed/i)){ // ออฟไลน์ + เคยล็อกอิน
-      if(isAdminSel(sf)){S.role='admin';S.user={sf:'ALL',name:adminName(sf)}}else{S.role='team';S.user={sf,name:sfShort(sf)}}show('vMain');$('#hdUser').textContent=S.user.name+' ⎋';await loadData();return}
+      if(isAdminSel(sf)){S.role='admin';S.user={sf:'ALL',name:adminName(sf)}}else{S.role='team';S.user={sf,name:sfShort(sf)}}show('vMain');posStart();$('#hdUser').textContent=S.user.name+' ⎋';await loadData();return}
     show('vLogin');$('#lgMsg').textContent=e.message;
   }
 }
@@ -807,6 +809,19 @@ let planN=(v=>PLAN_N.includes(v)?v:12)(lsGet('gw_plan_n',12));
 const PLAN_REST=[0,30,45,60,90];let planRest=lsGet('gw_plan_rest45',45);
 // ร้านที่เพิ่งเยี่ยมภายใน planRest วัน (และไม่ถึงวันนัดติดตาม) จะไม่ถูกจัดเข้าแผน
 const recentVisit=c=>{if(!planRest)return false;const u=c.u||{};if(!u.visits||!u.lastVisit)return false;if(u.next_follow&&u.next_follow<=PD())return false;return dayDiff(u.lastVisit.slice(0,10),PD())<planRest};
+// ตำแหน่งสด: ส่งตอนเปิดแอป + ทุก 5 นาทีขณะเปิดหน้าจอ (ฝากชั่วคราวที่เซิร์ฟเวอร์ ไม่บันทึกลงชีต) — เฉพาะ Sales ส่ง, ผู้จัดการดูได้
+let posTimer=0,posDenied=false;
+function posPing(){if(!S.user||S.user.sf==='ALL'||posDenied||document.hidden||!navigator.geolocation)return;
+  navigator.geolocation.getCurrentPosition(p=>{api('posPing',{sf:S.user.sf,lat:+p.coords.latitude.toFixed(6),lng:+p.coords.longitude.toFixed(6),acc:Math.round(p.coords.accuracy)}).catch(()=>{})},e=>{if(e&&e.code===1)posDenied=true},{enableHighAccuracy:false,timeout:15000,maximumAge:60000})}
+function posStart(){clearInterval(posTimer);posPing();posTimer=setInterval(posPing,300000)}
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)posPing()});
+async function posFill(){const bx=$('#posBox');if(!bx)return;
+  try{const j=await api('posList'),now=j.now||Date.now(),B=branchPt(),rows=j.rows.sort((a,b)=>a.sf<b.sf?-1:1);
+    const age=r=>Math.max(0,Math.round((now-r.t)/60000));
+    const pairs=[];for(let i=0;i<rows.length;i++)for(let k=i+1;k<rows.length;k++){const m=hav(rows[i].lat,rows[i].lng,rows[k].lat,rows[k].lng);if(m<=NEAR_M)pairs.push([rows[i],rows[k],m])}
+    bx.innerHTML=`<b>📍 ตำแหน่งสด</b> <span class="mut">· เฉพาะคนที่เปิดแอปอยู่ · ไม่บันทึกประวัติ · หายเองใน ~15 นาที</span>`+(rows.length?rows.map(r=>`<div class="s" style="${age(r)>7?'opacity:.55':''}">${sfShort(r.sf)} · ${age(r)<1?'เมื่อสักครู่':age(r)+' นาทีที่แล้ว'} · ±${r.acc||'?'} ม.${B?` · ห่างสาขา ${km1(hav(B.lat,B.lng,r.lat,r.lng))} กม.`:''} · <a href="https://www.google.com/maps?q=${r.lat},${r.lng}" target="_blank" rel="noopener">📍 Map</a></div>`).join(''):'<div class="mut">ยังไม่มีใครเปิดแอปในช่วงนี้</div>')
+      +(pairs.length?`<div style="margin-top:6px;color:#b26a00;font-weight:600">👥 อยู่ใกล้กันตอนนี้ (≤ ${NEAR_M} ม.): ${pairs.map(q=>`${sfShort(q[0].sf)} ↔ ${sfShort(q[1].sf)} ${Math.round(q[2])} ม.`).join(' · ')}</div>`:'')
+  }catch(e){bx.innerHTML='<b>📍 ตำแหน่งสด</b> <span class="mut">· โหลดไม่ได้ (ต้องอัปเดต Code.gs เป็นเวอร์ชันใหม่)</span>'}}
 const NEAR_M=10,NEAR_MIN=30;   // Sales ต่างคนเช็กอินห่างกันไม่เกิน 10 ม. ภายใน 30 นาที = อยู่ใกล้กัน
 const AREA_KM=10;   // ห่างร้านในแผนที่ใกล้สุดเกินกี่ กม. = นอกพื้นที่แผน
 function nearPairs(T,date){const G=T.filter(g=>g.date===date),out=[],mins=t=>+t.slice(11,13)*60+ +t.slice(14,16);
@@ -1084,10 +1099,11 @@ async function fillAdminApprInner(box,d,op,silent){
     <div class="acts">${(()=>{const g=trvOf(T,p.sf,p.date),B=branchPt();let pts=g&&g.stops.length?g.stops.map(x=>[x.lat,x.lng]):p.ids.map(id=>{const q=S.byId[id]&&shopPin(S.byId[id]);return q?[q.lat,q.lng]:null}).filter(Boolean);if(B&&pts.length)pts=[[B.lat,B.lng],...pts];pts=pts.slice(0,10);return pts.length>1?`<a class="btn ghost" style="text-decoration:none;text-align:center" target="_blank" rel="noopener" href="https://www.google.com/maps/dir/${pts.map(q=>q.join(',')).join('/')}">🗺️ ดูเส้นทางทั้งหมดใน Map</a>`:pts.length?`<a class="btn ghost" style="text-decoration:none;text-align:center" target="_blank" rel="noopener" href="https://www.google.com/maps?q=${pts[0].join(',')}">🗺️ ดูใน Map</a>`:''})()}${p.status==='SUBMITTED'?`<button class="btn red" data-ad="ok" data-id="${esc(p.plan_id)}">✅ อนุมัติ</button><button class="btn grey" data-ad="no" data-id="${esc(p.plan_id)}">❌ ส่งกลับ</button>`:''}<button class="btn grey" data-ad="clr" data-id="${esc(p.plan_id)}">🗑️ ล้างแผน (ให้เป็น 0)</button>${p.status==='APPROVED'?`<button class="btn ghost" data-ad="gt" data-id="${esc(p.plan_id)}">🔗 สร้างงานใน GO TASK</button>`:''}</div></details>`).join('');
   box.innerHTML=`<div class="box"><h3>📋 อนุมัติ/ติดตามแผนเยี่ยม${pend?` <span class="tag warn">รออนุมัติ ${pend}</span>`:''}</h3>
     <div class="mut" style="margin:-4px 0 6px">⏱️ อัปเดตอัตโนมัติทุก 15 วินาที · ล่าสุด ${new Date().toLocaleTimeString('th-TH')} <a href="#" id="apRef">🔄 รีเฟรช</a></div>
-    <div class="field" style="display:flex;align-items:center;gap:6px"><button class="btn ghost" id="apPrev" style="width:auto;padding:8px 12px;font-size:15px">◀</button><input type="date" id="apD" value="${d}" style="flex:1"><button class="btn ghost" id="apNext" style="width:auto;padding:8px 12px;font-size:15px">▶</button></div><div style="overflow:auto"><table class="t"><tr><th>SF</th><th>สถานะ</th><th>แผน</th><th>เยี่ยม</th><th>%</th><th>นอกแผน</th><th>Check-in แรก</th><th>กม.</th><th>ปิดงาน</th></tr>${rows}</table></div>
+    <div class="gps" id="posBox" style="margin-bottom:8px"><b>📍 ตำแหน่งสด</b> <span class="mut">กำลังโหลด…</span></div><div class="field" style="display:flex;align-items:center;gap:6px"><button class="btn ghost" id="apPrev" style="width:auto;padding:8px 12px;font-size:15px">◀</button><input type="date" id="apD" value="${d}" style="flex:1"><button class="btn ghost" id="apNext" style="width:auto;padding:8px 12px;font-size:15px">▶</button></div><div style="overflow:auto"><table class="t"><tr><th>SF</th><th>สถานะ</th><th>แผน</th><th>เยี่ยม</th><th>%</th><th>นอกแผน</th><th>Check-in แรก</th><th>กม.</th><th>ปิดงาน</th></tr>${rows}</table></div>
     <p class="mut" style="margin:6px 0 0">🚩 = Check-in แรกห่างร้านในแผนที่ใกล้สุดเกิน ${AREA_KM} กม. · กม. = ระยะทางจริงจากพิกัด Check-in ของวันนั้น (${branchPt()?routeTxt():'ระหว่างร้านเท่านั้น — ยังไม่ได้ตั้งพิกัดสาขา'}) · รวมวันนี้ ${km1(sfs.reduce((a,x)=>a+(trvOf(T,x,d)?trvOf(T,x,d).m:0),0))} กม.</p>
     ${NP.length?`<div class="gps bad" style="margin-top:8px"><b>👥 Sales ที่ Check-in ใกล้กัน (≤ ${NEAR_M} ม. ห่างกันไม่เกิน ${NEAR_MIN} นาที)</b>${NP.map(q=>{const ca=S.byId[q.x.id],cb=S.byId[q.y.id];return `<div class="s">${sfShort(q.a)} ${hhmm(q.x.ts)} (${esc(ca?title(ca):q.x.id)}) ↔ ${sfShort(q.b)} ${hhmm(q.y.ts)} (${esc(cb?title(cb):q.y.id)}) · ห่าง ${Math.round(q.m)} ม. · ${q.x.id===q.y.id?'ร้านเดียวกัน':'คนละร้าน'} · <a href="https://www.google.com/maps?q=${q.x.lat},${q.x.lng}" target="_blank" rel="noopener">📍 Map</a></div>`}).join('')}</div>`:''}
     <div class="acts"><button class="btn ghost" id="apX">📗 Excel ติดตามแผน 30 วัน</button></div></div>${det}`;
+  posFill();
   $('#apRef').onclick=e=>{e.preventDefault();S.travel=null;fillAdminAppr(true)};
   const goDay=nd=>{S.apprDate=nd;const di=$('#apD');if(di)di.value=nd;const tb=box.querySelector('table');if(tb)tb.style.opacity='.45';
     if(S.apWait)S.apWait();S.apWait=waitToast(`⏳ กำลังเลื่อนไป ${ddmm(nd)} รอสักครู่…`);fillAdminAppr(true,true)};
