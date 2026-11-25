@@ -103,6 +103,10 @@ summary{font-weight:700;cursor:pointer}
 .dspill{display:inline-block;padding:2px 9px;border-radius:999px;font-size:12px;font-weight:700}.dspill.g{background:#dff3e8;color:#1e8e4e}.dspill.a{background:#fff0cf;color:#a86400}.dspill.r{background:#fde3e4;color:#C0272D}
 table.dst th{color:var(--mut);font-weight:600;font-size:12px;white-space:nowrap}table.dst td{white-space:nowrap}
 .dc .hbar .p{height:9px}
+.dslive{border:0;border-radius:999px;padding:8px 16px;font:inherit;font-weight:700;color:#fff;cursor:pointer;display:inline-flex;align-items:center;gap:8px;box-shadow:0 2px 6px rgba(0,0,0,.15)}
+.dslive i{width:10px;height:10px;border-radius:50%;background:#fff;display:inline-block}
+.dslive.on{background:#1e8e4e}.dslive.on i{animation:lv 1.2s infinite}.dslive.off{background:#C0272D}.dslive.off i{opacity:.55}
+@keyframes lv{50%{opacity:.25}}
 .kpis{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}
 .kpi{background:#fff;border-radius:var(--r);padding:12px}.kpi b{font-size:26px;display:block}.kpi span{font-size:12.5px;color:var(--mut)}
 .prog{height:9px;background:#e6e9f1;border-radius:9px;overflow:hidden}.prog i{display:block;height:100%;background:var(--ok)}
@@ -284,7 +288,7 @@ async function api(action,payload={}){
 let demoMaster=null;
 function demoLatest(want){const out={};for(const r of lsGet('gw_demo_rec',[])){if(!want[r.id])continue;const o=out[r.id]||{visits:0,lastVisit:'',lastRes:''};const n={...r};n.visits=o.visits;n.lastVisit=o.lastVisit;n.lastRes=o.lastRes;if(r.type!=='EDIT'){n.visits++;n.lastVisit=r.ts;n.lastRes=r.visit_result}out[r.id]=n}return out}
 async function demoApi(action,p){
-  if(action==='login'){ if(S.pin==='1234')return{role:'team'}; if(S.pin==='gw2026')return{role:'admin'}; throw new Error('รหัสผ่านไม่ถูกต้อง (โหมดทดลอง: 1234 / ผู้จัดการ: gw2026)'); }
+  if(action==='login'){ if(S.pin==='1234')return{role:'team'}; if(DEMO_POS_PINS[S.pin])return{role:'admin',pos:DEMO_POS_PINS[S.pin]}; throw new Error('รหัสผ่านไม่ถูกต้อง (โหมดทดลอง: 1234 / ผู้จัดการ: gw2026)'); }
   if(action==='list'){ if(!demoMaster)demoMaster=await (await fetch(CONFIG.DEMO_DATA)).json();
     let rows=demoMaster.rows; const si=demoMaster.cols.indexOf('sf');
     if(p.sf&&p.sf!=='ALL')rows=rows.filter(r=>r[si]===p.sf);
@@ -309,7 +313,7 @@ async function demoApi(action,p){
   if(action==='posPing'){const P=lsGet('gw_demo_pos',{});P[p.sf]={sf:p.sf,lat:p.lat,lng:p.lng,acc:p.acc,t:Date.now()};lsSet('gw_demo_pos',P);return{}}
   if(action==='posList'){const P=lsGet('gw_demo_pos',{});return{rows:Object.values(P).filter(x=>Date.now()-x.t<900000),now:Date.now()}}
   if(action==='planSave'){const P=lsGet('gw_demo_plans',{}),x=p.plan,id=x.sf+'|'+x.date,cur=P[id];P[id]={plan_id:id,sf:x.sf,date:x.date,status:x.status==='DRAFT'?'DRAFT':'SUBMITTED',ids:x.ids.join(','),n:x.ids.length,area:x.area||'',submitted_ts:nowIso(),submitted_by:x.sf,decided_ts:'',decided_by:'',note:''};lsSet('gw_demo_plans',P);return{}}
-  if(action==='planDecide'){if(S.pin!=='gw2026')throw new Error('เฉพาะผู้จัดการเท่านั้น');const P=lsGet('gw_demo_plans',{}),c=P[p.plan_id];if(!c||c.status!=='SUBMITTED')throw new Error('แผนนี้ไม่ได้อยู่ในสถานะรออนุมัติ');c.status=p.decision;c.decided_ts=nowIso();c.decided_by=p.by||'ผู้จัดการ';c.note=p.note||'';lsSet('gw_demo_plans',P);return{}}
+  if(action==='planDecide'){if(!DEMO_POS_PINS[S.pin])throw new Error('เฉพาะผู้จัดการเท่านั้น');const P=lsGet('gw_demo_plans',{}),c=P[p.plan_id];if(!c||c.status!=='SUBMITTED')throw new Error('แผนนี้ไม่ได้อยู่ในสถานะรออนุมัติ');c.status=p.decision;c.decided_ts=nowIso();c.decided_by=p.by||'ผู้จัดการ';c.note=p.note||'';lsSet('gw_demo_plans',P);return{}}
   if(action==='planList'){const from=p.from||todayStr(),to=p.to||from,rec=lsGet('gw_demo_rec',[]).filter(r=>r.type!=='EDIT'),day={},ci={};
     rec.forEach(r=>{const d=String(r.ts).slice(0,10);if(d<from||d>to)return;(day[d]=day[d]||{})[r.id]=1;const k=d+'|'+r.user;(ci[k]=ci[k]||{})[r.id]=1});
     const plans=Object.values(lsGet('gw_demo_plans',{})).filter(o=>o.date>=from&&o.date<=to&&(!p.sf||p.sf==='ALL'||o.sf===p.sf)).map(o=>{const ids=o.ids?o.ids.split(','):[],mine=ci[o.date+'|'+o.sf]||{};return{...o,ids,done:ids.filter(i=>(day[o.date]||{})[i]),extra:Object.keys(mine).filter(i=>!ids.includes(i)).length}});
@@ -372,7 +376,8 @@ function initLogin(){
   $('#lgGo').onclick=doLogin; $('#lgPin').onkeydown=e=>{if(e.key==='Enter')doLogin()};
   if(saved&&saved.pin){S.pin=saved.pin;login(saved.sf,true)}else show('vLogin');
 }
-const ADMIN_POS=['SGM','ASGM-SC','SM-SC'];
+const ADMIN_POS=['SGM','ASGM-SC','SM-SC'],LIVE_POS=['ASGM-SC'];
+const DEMO_POS_PINS={sgm2026:'SGM',asgm2026:'ASGM-SC',smsc2026:'SM-SC'};   // เฉพาะโหมดทดลอง (ของจริงอยู่ใน Code.gs)
 const isAdminSel=sf=>sf==='ADMIN'||String(sf).startsWith('ADMIN:');
 const adminName=sf=>String(sf).split(':')[1]||'ผู้จัดการ';
 async function doLogin(){S.pin=$('#lgPin').value.trim();if(!S.pin)return;login($('#lgSf').value,false)}
@@ -381,6 +386,7 @@ async function login(sf,silent){
   try{
     const r=await api('login');S.role=r.role;
     if(isAdminSel(sf)&&S.role!=='admin')throw new Error('รหัสนี้ไม่ใช่รหัสผู้จัดการ');
+    if(isAdminSel(sf)&&r.pos&&r.pos!==adminName(sf))throw new Error('รหัสนี้ไม่ตรงกับตำแหน่ง '+adminName(sf));
     S.user={sf:isAdminSel(sf)?'ALL':sf,name:isAdminSel(sf)?adminName(sf):sfShort(sf)};
     if(S.role==='admin'&&!isAdminSel(sf))S.role='team'; // เลือกเป็น SF = เห็นเฉพาะพอร์ตนั้น
     lsSet('gw_user',{sf,pin:S.pin});
@@ -810,7 +816,7 @@ const PLAN_REST=[0,30,45,60,90];let planRest=lsGet('gw_plan_rest45',45);
 // ร้านที่เพิ่งเยี่ยมภายใน planRest วัน (และไม่ถึงวันนัดติดตาม) จะไม่ถูกจัดเข้าแผน
 const recentVisit=c=>{if(!planRest)return false;const u=c.u||{};if(!u.visits||!u.lastVisit)return false;if(u.next_follow&&u.next_follow<=PD())return false;return dayDiff(u.lastVisit.slice(0,10),PD())<planRest};
 // ตำแหน่งสด: ส่งตอนเปิดแอป + ทุก 5 นาทีขณะเปิดหน้าจอ (ฝากชั่วคราวที่เซิร์ฟเวอร์ ไม่บันทึกลงชีต) — เฉพาะ Sales ส่ง, ผู้จัดการดูได้
-let posTimer=0,posDenied=false;
+let posTimer=0,posDenied=false;S.live=lsGet('gw_live',false);
 function posPing(){if(!S.user||S.user.sf==='ALL'||posDenied||document.hidden||!navigator.geolocation)return;
   navigator.geolocation.getCurrentPosition(p=>{api('posPing',{sf:S.user.sf,lat:+p.coords.latitude.toFixed(6),lng:+p.coords.longitude.toFixed(6),acc:Math.round(p.coords.accuracy)}).catch(()=>{})},e=>{if(e&&e.code===1)posDenied=true},{enableHighAccuracy:false,timeout:15000,maximumAge:60000})}
 function posStart(){clearInterval(posTimer);posPing();posTimer=setInterval(posPing,300000)}
@@ -821,14 +827,10 @@ async function posFill(){const bx=$('#posBox');if(!bx)return;
     const pairs=[];for(let i=0;i<rows.length;i++)for(let k=i+1;k<rows.length;k++){const m=hav(rows[i].lat,rows[i].lng,rows[k].lat,rows[k].lng);if(m<=NEAR_M)pairs.push([rows[i],rows[k],m])}
     bx.innerHTML=`<b>📍 ตำแหน่งสด</b> <span class="mut">· เฉพาะคนที่เปิดแอปอยู่ · ไม่บันทึกประวัติ · หายเองใน ~15 นาที</span>`+(rows.length?rows.map(r=>`<div class="s" style="${age(r)>7?'opacity:.55':''}">${sfShort(r.sf)} · ${age(r)<1?'เมื่อสักครู่':age(r)+' นาทีที่แล้ว'} · ±${r.acc||'?'} ม.${B?` · ห่างสาขา ${km1(hav(B.lat,B.lng,r.lat,r.lng))} กม.`:''} · <a href="https://www.google.com/maps?q=${r.lat},${r.lng}" target="_blank" rel="noopener">📍 Map</a></div>`).join(''):'<div class="mut">ยังไม่มีใครเปิดแอปในช่วงนี้</div>')
       +(pairs.length?`<div style="margin-top:6px;color:#b26a00;font-weight:600">👥 อยู่ใกล้กันตอนนี้ (≤ ${NEAR_M} ม.): ${pairs.map(q=>`${sfShort(q[0].sf)} ↔ ${sfShort(q[1].sf)} ${Math.round(q[2])} ม.`).join(' · ')}</div>`:'')
+  S.posHtml=bx.innerHTML;
   }catch(e){bx.innerHTML='<b>📍 ตำแหน่งสด</b> <span class="mut">· โหลดไม่ได้ (ต้องอัปเดต Code.gs เป็นเวอร์ชันใหม่)</span>'}}
-const NEAR_M=10,NEAR_MIN=30;   // Sales ต่างคนเช็กอินห่างกันไม่เกิน 10 ม. ภายใน 30 นาที = อยู่ใกล้กัน
+const NEAR_M=10;   // ตำแหน่งสด: SF ต่างคนอยู่ห่างกันไม่เกิน 10 ม. = แจ้งว่าอยู่ใกล้กัน (เฉพาะ ASGM-SC)
 const AREA_KM=10;   // ห่างร้านในแผนที่ใกล้สุดเกินกี่ กม. = นอกพื้นที่แผน
-function nearPairs(T,date){const G=T.filter(g=>g.date===date),out=[],mins=t=>+t.slice(11,13)*60+ +t.slice(14,16);
-  for(let i=0;i<G.length;i++)for(let j=i+1;j<G.length;j++){if(G[i].user===G[j].user)continue;let best=null;
-    G[i].stops.forEach(x=>G[j].stops.forEach(y=>{const m=hav(x.lat,x.lng,y.lat,y.lng),dt=Math.abs(mins(x.ts)-mins(y.ts));if(m<=NEAR_M&&dt<=NEAR_MIN&&(!best||m<best.m))best={m,dt,x,y}}));
-    if(best)out.push({a:G[i].user,b:G[j].user,...best})}
-  return out}
 function areaGap(ids,lat,lng){let best=null;(ids||[]).forEach(id=>{const c=S.byId[id],q=c&&shopPin(c);if(!q)return;const d=hav(lat,lng,q.lat,q.lng);if(best==null||d<best)best=d});return best}
 const planKey=sf=>'gw_plan_'+sf+'_'+PD();
 const planScope=()=>S.user.sf==='ALL'?(S.planSf||''):S.user.sf;
@@ -1088,22 +1090,19 @@ async function fillAdminApprInner(box,d,op,silent){
   const sfs=[...new Set(S.all.map(c=>c.sf).filter(Boolean))].sort(),P={};j.plans.filter(p=>p.date===d).forEach(p=>P[p.sf]=p);
   const shown=j.plans.filter(p=>p.date===d||p.status==='SUBMITTED');
   const pend=j.plans.filter(p=>p.status==='SUBMITTED').length;
-  const NP=nearPairs(T,d);
   const rows=sfs.map(sf=>{const p=P[sf],ex=p?p.extra:(j.ci[d+'|'+sf]||0),pl=p?p.ids.length:0,dn=p?p.done.length:0;
     const areaFlag=(()=>{const g=trvOf(T,sf,d);if(!p||!g||!g.stops.length)return'';const x=g.stops[0],gap=areaGap(p.ids,x.lat,x.lng);return gap!=null&&gap>AREA_KM*1000?`<br><span style="color:var(--red);font-size:11.5px;font-weight:600">🚩 นอกพื้นที่ ${km1(gap)} กม.</span>`:''})();
-    const nearFlag=NP.filter(q=>q.a===sf||q.b===sf).map(q=>`<br><span style="color:#b26a00;font-size:11.5px;font-weight:600">👥 ใกล้ ${sfShort(q.a===sf?q.b:q.a)} ${Math.round(q.m)} ม.</span>`).join('');
-    return `<tr><td>${sfShort(sf)}${areaFlag}${nearFlag}</td><td>${p?(STAT_TH[p.status]||p.status):'<span class="mut">ไม่ได้ส่ง</span>'}</td><td>${pl||'-'}</td><td>${p?dn:'-'}</td><td>${pl?Math.round(dn*100/pl)+'%':'-'}</td><td>${ex||'-'}</td><td>${firstOf(sf,d)}</td><td>${kmOf(sf,d)}</td><td>${closeCell(sf,d,(p?p.extra+p.done.length:0)+ex>0||!!trvOf(T,sf,d))}</td></tr>`}).join('');
+    return `<tr><td>${sfShort(sf)}${areaFlag}</td><td>${p?(STAT_TH[p.status]||p.status):'<span class="mut">ไม่ได้ส่ง</span>'}</td><td>${pl||'-'}</td><td>${p?dn:'-'}</td><td>${pl?Math.round(dn*100/pl)+'%':'-'}</td><td>${ex||'-'}</td><td>${firstOf(sf,d)}</td><td>${kmOf(sf,d)}</td><td>${closeCell(sf,d,(p?p.extra+p.done.length:0)+ex>0||!!trvOf(T,sf,d))}</td></tr>`}).join('');
   const det=shown.sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:a.sf<b.sf?-1:1).map(p=>`<details class="box" style="margin:6px 0" data-k="${esc(p.plan_id)}"${p.status==='SUBMITTED'||op.has(p.plan_id)?' open':''}><summary><b>${sfShort(p.sf)}</b> · แผน ${ddmm(p.date)} · ${STAT_TH[p.status]||p.status} · ${p.ids.length} ร้าน (เยี่ยมแล้ว ${p.done.length})${p.status==='SUBMITTED'?' 👈':''}</summary>
     <div style="margin-top:6px">${p.ids.map((id,i)=>{const c=S.byId[id];return `<div class="s">${p.done.includes(id)?'✅':'⬜'} ${i+1}. ${esc(c?title(c):id)} · ${esc(c?[V(c,'subd'),V(c,'dist')].filter(Boolean).join(' / '):'')}${(()=>{const g=trvOf(T,p.sf,p.date),st=g&&g.stops.find(x=>x.id===id);return (st?` · 🕐 ${hhmm(st.ts)}`:'')+(()=>{const q=shopPin(c);const pt=st&&st.lat&&st.lng?{lat:st.lat,lng:st.lng,t:'📍 ตำแหน่งเช็คอินจริง'}:q?{lat:q.lat,lng:q.lng,t:'📌 หมุดร้าน'}:null;return pt?` · <a href="https://www.google.com/maps?q=${pt.lat},${pt.lng}" target="_blank" rel="noopener" title="${pt.t}">${pt.t.slice(0,2)} Map</a>`:''})()})()}</div>`}).join('')}</div>
     ${p.note?`<div class="mut">หมายเหตุ: ${esc(p.note)}</div>`:''}
     <div class="acts">${(()=>{const g=trvOf(T,p.sf,p.date),B=branchPt();let pts=g&&g.stops.length?g.stops.map(x=>[x.lat,x.lng]):p.ids.map(id=>{const q=S.byId[id]&&shopPin(S.byId[id]);return q?[q.lat,q.lng]:null}).filter(Boolean);if(B&&pts.length)pts=[[B.lat,B.lng],...pts];pts=pts.slice(0,10);return pts.length>1?`<a class="btn ghost" style="text-decoration:none;text-align:center" target="_blank" rel="noopener" href="https://www.google.com/maps/dir/${pts.map(q=>q.join(',')).join('/')}">🗺️ ดูเส้นทางทั้งหมดใน Map</a>`:pts.length?`<a class="btn ghost" style="text-decoration:none;text-align:center" target="_blank" rel="noopener" href="https://www.google.com/maps?q=${pts[0].join(',')}">🗺️ ดูใน Map</a>`:''})()}${p.status==='SUBMITTED'?`<button class="btn red" data-ad="ok" data-id="${esc(p.plan_id)}">✅ อนุมัติ</button><button class="btn grey" data-ad="no" data-id="${esc(p.plan_id)}">❌ ส่งกลับ</button>`:''}<button class="btn grey" data-ad="clr" data-id="${esc(p.plan_id)}">🗑️ ล้างแผน (ให้เป็น 0)</button>${p.status==='APPROVED'?`<button class="btn ghost" data-ad="gt" data-id="${esc(p.plan_id)}">🔗 สร้างงานใน GO TASK</button>`:''}</div></details>`).join('');
   box.innerHTML=`<div class="box"><h3>📋 อนุมัติ/ติดตามแผนเยี่ยม${pend?` <span class="tag warn">รออนุมัติ ${pend}</span>`:''}</h3>
     <div class="mut" style="margin:-4px 0 6px">⏱️ อัปเดตอัตโนมัติทุก 15 วินาที · ล่าสุด ${new Date().toLocaleTimeString('th-TH')} <a href="#" id="apRef">🔄 รีเฟรช</a></div>
-    <div class="gps" id="posBox" style="margin-bottom:8px"><b>📍 ตำแหน่งสด</b> <span class="mut">กำลังโหลด…</span></div><div class="field" style="display:flex;align-items:center;gap:6px"><button class="btn ghost" id="apPrev" style="width:auto;padding:8px 12px;font-size:15px">◀</button><input type="date" id="apD" value="${d}" style="flex:1"><button class="btn ghost" id="apNext" style="width:auto;padding:8px 12px;font-size:15px">▶</button></div><div style="overflow:auto"><table class="t"><tr><th>SF</th><th>สถานะ</th><th>แผน</th><th>เยี่ยม</th><th>%</th><th>นอกแผน</th><th>Check-in แรก</th><th>กม.</th><th>ปิดงาน</th></tr>${rows}</table></div>
+    ${LIVE_POS.includes(S.user.name)?`<div id="posWrap" style="margin-bottom:8px"><button type="button" id="posTgl" class="dslive ${S.live?'on':'off'}"><i></i>Live · ${S.live?'เปิดอยู่':'ปิดอยู่'}</button>${S.live?`<div class="gps" id="posBox" style="margin-top:6px">${S.posHtml||'<b>📍 ตำแหน่งสด</b> <span class="mut">กำลังโหลด…</span>'}</div>`:''}</div>`:''}<div class="field" style="display:flex;align-items:center;gap:6px"><button class="btn ghost" id="apPrev" style="width:auto;padding:8px 12px;font-size:15px">◀</button><input type="date" id="apD" value="${d}" style="flex:1"><button class="btn ghost" id="apNext" style="width:auto;padding:8px 12px;font-size:15px">▶</button></div><div style="overflow:auto"><table class="t"><tr><th>SF</th><th>สถานะ</th><th>แผน</th><th>เยี่ยม</th><th>%</th><th>นอกแผน</th><th>Check-in แรก</th><th>กม.</th><th>ปิดงาน</th></tr>${rows}</table></div>
     <p class="mut" style="margin:6px 0 0">🚩 = Check-in แรกห่างร้านในแผนที่ใกล้สุดเกิน ${AREA_KM} กม. · กม. = ระยะทางจริงจากพิกัด Check-in ของวันนั้น (${branchPt()?routeTxt():'ระหว่างร้านเท่านั้น — ยังไม่ได้ตั้งพิกัดสาขา'}) · รวมวันนี้ ${km1(sfs.reduce((a,x)=>a+(trvOf(T,x,d)?trvOf(T,x,d).m:0),0))} กม.</p>
-    ${NP.length?`<div class="gps bad" style="margin-top:8px"><b>👥 Sales ที่ Check-in ใกล้กัน (≤ ${NEAR_M} ม. ห่างกันไม่เกิน ${NEAR_MIN} นาที)</b>${NP.map(q=>{const ca=S.byId[q.x.id],cb=S.byId[q.y.id];return `<div class="s">${sfShort(q.a)} ${hhmm(q.x.ts)} (${esc(ca?title(ca):q.x.id)}) ↔ ${sfShort(q.b)} ${hhmm(q.y.ts)} (${esc(cb?title(cb):q.y.id)}) · ห่าง ${Math.round(q.m)} ม. · ${q.x.id===q.y.id?'ร้านเดียวกัน':'คนละร้าน'} · <a href="https://www.google.com/maps?q=${q.x.lat},${q.x.lng}" target="_blank" rel="noopener">📍 Map</a></div>`}).join('')}</div>`:''}
     <div class="acts"><button class="btn ghost" id="apX">📗 Excel ติดตามแผน 30 วัน</button></div></div>${det}`;
-  posFill();
+  posFill();const tg=$('#posTgl');if(tg)tg.onclick=()=>{S.live=!S.live;lsSet('gw_live',S.live);if(!S.live)S.posHtml='';fillAdminAppr(true,true)};
   $('#apRef').onclick=e=>{e.preventDefault();S.travel=null;fillAdminAppr(true)};
   const goDay=nd=>{S.apprDate=nd;const di=$('#apD');if(di)di.value=nd;const tb=box.querySelector('table');if(tb)tb.style.opacity='.45';
     if(S.apWait)S.apWait();S.apWait=waitToast(`⏳ กำลังเลื่อนไป ${ddmm(nd)} รอสักครู่…`);fillAdminAppr(true,true)};
