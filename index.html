@@ -102,6 +102,7 @@ summary{font-weight:700;cursor:pointer}
 .dsrk{width:20px;height:20px;border-radius:50%;background:#eef2fa;color:var(--blue);font-size:11px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;flex:none}
 .dspill{display:inline-block;padding:2px 9px;border-radius:999px;font-size:12px;font-weight:700}.dspill.g{background:#dff3e8;color:#1e8e4e}.dspill.a{background:#fff0cf;color:#a86400}.dspill.r{background:#fde3e4;color:#C0272D}
 table.dst th{color:var(--mut);font-weight:600;font-size:12px;white-space:nowrap}table.dst td{white-space:nowrap}
+.dscomp table.dst{font-size:11px}.dscomp table.dst th,.dscomp table.dst td{padding:5px 4px;font-size:11px}.dscomp .dspill{font-size:10px;padding:1px 5px}
 .dc .hbar .p{height:9px}
 .kpis{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}
 .kpi{background:#fff;border-radius:var(--r);padding:12px}.kpi b{font-size:26px;display:block}.kpi span{font-size:12.5px;color:var(--mut)}
@@ -645,7 +646,7 @@ function renderDash(){
   const pc=n=>tot?Math.round(n*100/tot):0,pill=v=>`<span class="dspill ${v>=60?'g':v>=30?'a':'r'}">${v}%</span>`;
   let sfTbl='';
   if(S.user.sf==='ALL'){const m={};A.forEach(c=>{const k=c.sf||'—';const o=m[k]||(m[k]={t:0,c:0,d:0,td:0,p:0,pn:0,out:0});if(c.port==='OUT')o.out++;{const b=bpOf(c);if(b){o.bpT=(o.bpT||0)+b.total;o.bpW=(o.bpW||0)+b.gw}}o.t++;if(checked(c))o.c++;if(due(c))o.d++;if(c.u?.lastVisit?.startsWith(td))o.td++;if(V(c,'phone'))o.p++;if(shopPin(c))o.pn++});
-    sfTbl=`<div class="dc wide"><h3>👥 แยกตามพอร์ต</h3><div style="overflow:auto"><table class="t dst"><tr><th>SF</th><th>ลูกค้า</th><th>Check-in</th><th>% ครอบคลุม</th><th>วันนี้</th><th>ถึงนัด</th><th>มีเบอร์</th><th>มีพิกัด</th><th>🔴 รอตัดออก</th><th>SoW</th></tr>${Object.entries(m).sort().map(([k,o])=>`<tr><td><b>${k==='—'?'ไม่มี SF':sfShort(k)}</b></td><td>${fmt(o.t)}</td><td>${fmt(o.c)}</td><td style="min-width:110px"><div style="display:flex;align-items:center;gap:6px;justify-content:flex-end"><span class="p" style="width:54px;height:7px;background:#e6e9f1;border-radius:9px;overflow:hidden;display:inline-block"><i style="display:block;height:100%;width:${Math.round(o.c*100/o.t)}%;background:var(--blue)"></i></span>${pill(Math.round(o.c*100/o.t))}</div></td><td>${o.td||'-'}</td><td>${o.d?`<b style="color:var(--red)">${o.d}</b>`:'-'}</td><td>${Math.round(o.p*100/o.t)}%</td><td>${Math.round(o.pn*100/o.t)}%</td><td>${o.out||'-'}</td><td>${o.bpT?Math.round(o.bpW*100/o.bpT)+'%':'-'}</td></tr>`).join('')}</table></div></div>`}
+    sfTbl=`<div class="dc dscomp"><h3>👥 แยกตามพอร์ต</h3><div style="overflow:auto"><table class="t dst"><tr><th>SF</th><th>ลูกค้า</th><th>เช็คอิน</th><th>%</th><th>วันนี้</th><th>ถึงนัด</th><th>เบอร์</th><th>พิกัด</th><th>🔴ตัดออก</th><th>SoW</th></tr>${Object.entries(m).sort().map(([k,o])=>`<tr><td><b>${k==='—'?'ไม่มี SF':sfShort(k)}</b></td><td>${fmt(o.t)}</td><td>${fmt(o.c)}</td><td style="min-width:72px"><div style="display:flex;align-items:center;gap:4px;justify-content:flex-end"><span class="p" style="width:30px;height:6px;background:#e6e9f1;border-radius:9px;overflow:hidden;display:inline-block"><i style="display:block;height:100%;width:${Math.round(o.c*100/o.t)}%;background:var(--blue)"></i></span>${pill(Math.round(o.c*100/o.t))}</div></td><td>${o.td||'-'}</td><td>${o.d?`<b style="color:var(--red)">${o.d}</b>`:'-'}</td><td>${Math.round(o.p*100/o.t)}%</td><td>${Math.round(o.pn*100/o.t)}%</td><td>${o.out||'-'}</td><td>${o.bpT?Math.round(o.bpW*100/o.bpT)+'%':'-'}</td></tr>`).join('')}</table></div></div>`}
   S.dashTs=new Date().toLocaleTimeString('th-TH');
   const tile=(cls,ic,big,lb,bar)=>`<div class="dstile ${cls}"><div class="ic">${ic}</div><b>${big}</b><span>${lb}</span>${bar==null?'':`<div class="dsbar"><i style="width:${Math.min(100,bar)}%"></i></div>`}</div>`;
   const bpHtml=(()=>{const L=A.map(c=>({c,b:bpOf(c)})).filter(x=>x.b);if(!L.length)return '<div class="dc wide"><h3>💰 Buying Potential</h3><span class="mut">ยังไม่มีข้อมูล Potential — เซลส์กรอกได้ในหน้า Check-in / แก้ไขข้อมูล</span></div>';
@@ -658,11 +659,11 @@ function renderDash(){
       <div class="dsh3"><div><b>${fmt(tot)}</b><span>ลูกค้าในรายการ</span></div><div><b>${fmt(ck)}</b><span>Check-in แล้ว</span></div><div><b>${fmt(tot-ck)}</b><span>ยังไม่ได้เยี่ยม</span></div></div></div></div>
     <div class="dstiles wide">${tile('g','📍',fmt(today),'Check-in วันนี้',null)}${tile(dueN?'a hot':'b','⏰',fmt(dueN),'ถึงกำหนดติดตาม',null)}${tile('b','📞',pc(ph)+'%','มีเบอร์โทร',pc(ph))}${tile('p','🗺️',pc(pn)+'%','มีพิกัดร้าน',pc(pn))}</div>
     ${bpHtml}
-    <div class="box dc wide" id="trvBox"><h3>🚗 การเดินทางรวม</h3><span class="mut">กำลังคำนวณ…</span></div>
     ${dsGroup('ผลการติดตามล่าสุด','📋',VR_GROUPS,A.map(c=>c.u?.lastRes).filter(Boolean),['#1e8e4e','#C0272D'])}
     ${dsGroup('สถานะลูกค้าปัจจุบัน','🏷️',ST_GROUPS,A.map(c=>c.u?.cust_status).filter(Boolean),['#0168B5','#6c4bd1','#d98200'],true)}
     ${dsGroup('เหตุผลที่ไม่ซื้อ','🛒',NB_GROUPS,A.map(c=>c.u?.not_buy_reason).filter(Boolean),['#d98200','#0168B5','#6c4bd1','#8a93a6'])}
-    ${sfTbl}</div>`;
+    ${sfTbl}
+    <div class="box dc wide" id="trvBox"><h3>🚗 การเดินทางรวม</h3><span class="mut">กำลังคำนวณ…</span></div></div>`;
   fillTravelBox();
   $('#dsRef').onclick=async()=>{S.travel=null;if(S.user.sf==='ALL')await syncRecent();renderDash()};
 }
